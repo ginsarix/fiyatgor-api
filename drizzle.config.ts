@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { defineConfig } from "drizzle-kit";
 
 export default defineConfig({
@@ -5,6 +6,6 @@ export default defineConfig({
   schema: "./src/db/schemas/index.ts",
   out: "./drizzle",
   dbCredentials: {
-    url: "postgresql://postgres.zpwyewtsgzttggnjhrdq:Banyemicem12*@aws-1-ap-south-1.pooler.supabase.com:5432/postgres",
+    url: process.env.DATABASE_URL!,
   },
 });
