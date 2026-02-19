@@ -1,0 +1,62 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1770877774808,
+      "tag": "0000_abandoned_bill_hollister",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1770893691272,
+      "tag": "0001_cuddly_guardian",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1770898145196,
+      "tag": "0002_empty_professor_monster",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1771423969276,
+      "tag": "0003_silky_doctor_doom",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1771493312764,
+      "tag": "0004_steep_rattler",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1771498119404,
+      "tag": "0005_huge_talon",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1771499426315,
+      "tag": "0006_daily_energizer",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1771503608116,
+      "tag": "0007_flimsy_wallow",
+      "breakpoints": true
+    }
+  ]
+}

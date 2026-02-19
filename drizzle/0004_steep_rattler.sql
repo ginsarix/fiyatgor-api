@@ -1,0 +1,1 @@
+ALTER TABLE "jobs" ADD CONSTRAINT "jobs_firm_id_unique" UNIQUE("firm_id");

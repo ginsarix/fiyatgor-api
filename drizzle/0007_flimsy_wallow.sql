@@ -1,0 +1,1 @@
+ALTER TABLE "firms" ADD COLUMN "dia_period_code" integer DEFAULT 0;

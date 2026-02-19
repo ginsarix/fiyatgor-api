@@ -1,0 +1,1 @@
+ALTER TABLE "equivalent_barcodes" DROP CONSTRAINT "equivalent_barcodes_dia_key_unique";
