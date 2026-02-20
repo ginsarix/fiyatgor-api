@@ -1,4 +1,4 @@
-import { count, eq, sql } from "drizzle-orm";
+import { and, count, eq, notInArray, sql } from "drizzle-orm";
 import { ONLY_ACTIVE_FILTER } from "../constants/dia.js";
 import { SELECTED_COLUMNS } from "../constants/products.js";
 import type { DB } from "../db/index.js";
@@ -76,6 +76,7 @@ export async function saveProducts(db: DB, stocks: DiaStock[], firmId: number) {
   let updatedProductRowsCount = 0;
   let insertedBarcodeRowsCount = 0;
   let updatedBarcodeRowsCount = 0;
+  let deletedProductRowsCount = 0;
 
   for (let i = 0; i < products.length; i += chunkSize) {
     const chunk = products.slice(i, i + chunkSize);
@@ -163,11 +164,36 @@ export async function saveProducts(db: DB, stocks: DiaStock[], firmId: number) {
     });
   }
 
+  const fetchedDiaKeys = stocks.map((s) => Number(s._key));
+
+  if (fetchedDiaKeys.length > 0) {
+    const deleted = await db
+      .delete(productsTable)
+      .where(
+        and(
+          eq(productsTable.firmId, firmId),
+          notInArray(productsTable.diaKey, fetchedDiaKeys),
+        ),
+      )
+      .returning({ id: productsTable.id });
+
+    deletedProductRowsCount = deleted.length;
+  } else {
+    // Nothing came back from DIA — remove all products for this firm
+    const deleted = await db
+      .delete(productsTable)
+      .where(eq(productsTable.firmId, firmId))
+      .returning({ id: productsTable.id });
+
+    deletedProductRowsCount = deleted.length;
+  }
+
   return {
     insertedProductRowsCount,
     updatedProductRowsCount,
     insertedBarcodeRowsCount,
     updatedBarcodeRowsCount,
+    deletedProductRowsCount,
   };
 }
 
