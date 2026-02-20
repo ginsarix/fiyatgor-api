@@ -64,6 +64,21 @@ export function registerSuperAdminRoutes(app: Hono) {
     },
   );
 
+  app.get("/superadmin/users", async (c) => {
+    const users = await db.select().from(usersTable);
+
+    return c.json(
+      {
+        message: "Kullanıcılar başarıyla getirildi",
+        users: users.map((u) => ({
+          ...u,
+          password: undefined,
+        })),
+      },
+      200,
+    );
+  });
+
   app.get("/superadmin/firms", async (c) => {
     const firms = await db.select().from(firmsTable);
 

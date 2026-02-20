@@ -1,4 +1,14 @@
-import { and, count, eq, notInArray, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  ilike,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
 import { ONLY_ACTIVE_FILTER } from "../constants/dia.js";
 import { SELECTED_COLUMNS } from "../constants/products.js";
 import type { DB } from "../db/index.js";
@@ -203,12 +213,38 @@ type GetProductsRequest = DiaListRequest<GetProductsRequestServiceName>;
 /**
  * @param request if selectedcolumns is empty {@link SELECTED_COLUMNS} will be used as a default
  */
+const SORT_COLUMNS = {
+  name: productsTable.name,
+  price: productsTable.price,
+  stockCode: productsTable.stockCode,
+  status: productsTable.status,
+  stockQuantity: productsTable.stockQuantity,
+} as const;
+
+export type ProductSortBy = keyof typeof SORT_COLUMNS;
+export type SortOrder = "asc" | "desc";
+
+export interface GetProductsOptions {
+  page?: number;
+  limit?: number;
+  search?: string;
+  sortBy?: ProductSortBy;
+  sortOrder?: SortOrder;
+}
+
 export async function getProducts(
   db: DB,
   serverCode: string,
-  page: number = 1,
-  limit: number = 20,
-): Promise<InsertableProduct[] | null> {
+  {
+    page = 1,
+    limit = 20,
+    search,
+    sortBy = "name",
+    sortOrder = "asc",
+  }: GetProductsOptions = {},
+): Promise<
+  { products: InsertableProduct; barcodes: InsertableBarcode | null }[] | null
+> {
   // get the firm id using serverCode
   const [firm] = await db
     .select({ firmId: firmsTable.id })
@@ -219,10 +255,24 @@ export async function getProducts(
 
   const offset = (page - 1) * limit;
 
+  const searchFilter = search
+    ? or(
+        ilike(productsTable.name, `%${search}%`),
+        ilike(productsTable.stockCode, `%${search}%`),
+      )
+    : undefined;
+
+  const whereClause = and(eq(productsTable.firmId, firm.firmId), searchFilter);
+
+  const orderFn = sortOrder === "desc" ? desc : asc;
+  const sortColumn = SORT_COLUMNS[sortBy];
+
   const existingProducts = await db
     .select()
     .from(productsTable)
-    .where(eq(productsTable.firmId, firm.firmId))
+    .leftJoin(barcodesTable, eq(barcodesTable.productId, productsTable.id))
+    .where(whereClause)
+    .orderBy(orderFn(sortColumn))
     .limit(limit)
     .offset(offset);
 
@@ -232,6 +282,7 @@ export async function getProducts(
 export async function getProductsCount(
   db: DB,
   serverCode: string,
+  search?: string,
 ): Promise<number | null> {
   // get the firm id using serverCode
   const [firm] = await db
@@ -241,12 +292,19 @@ export async function getProductsCount(
 
   if (!firm) return null;
 
-  const [product] = await db
+  const searchFilter = search
+    ? or(
+        ilike(productsTable.name, `%${search}%`),
+        ilike(productsTable.stockCode, `%${search}%`),
+      )
+    : undefined;
+
+  const [result] = await db
     .select({ count: count() })
     .from(productsTable)
-    .where(eq(productsTable.firmId, firm.firmId));
+    .where(and(eq(productsTable.firmId, firm.firmId), searchFilter));
 
-  return product.count;
+  return result.count;
 }
 
 export async function loadProducts(

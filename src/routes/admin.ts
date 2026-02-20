@@ -10,6 +10,11 @@ import { usersTable } from "../db/schemas/users.js";
 import { adminAuth, firmAuth } from "../middlewares/auth.js";
 import { runProductSyncJob } from "../services/jobs/job-fns.js";
 import { createJob, deleteJob } from "../services/jobs/scheduler.js";
+import type {
+  GetProductsOptions,
+  ProductSortBy,
+  SortOrder,
+} from "../services/product.js";
 import {
   getProducts,
   getProductsCount,
@@ -149,23 +154,31 @@ export function registerAdminRoutes(app: Hono) {
       z.object({
         page: z.coerce.number().int().positive().default(1),
         limit: z.coerce.number().int().positive().max(100).default(20),
+        search: z.string().min(1).optional(),
+        sortBy: z
+          .enum(["name", "price", "stockCode", "status", "stockQuantity"])
+          .default("name"),
+        sortOrder: z.enum(["asc", "desc"]).default("asc"),
       }),
     ),
     async (c) => {
       const { diaServerCode: serverCode } = c.get("firm");
-      const pagination = c.req.valid("query");
+      const { page, limit, search, sortBy, sortOrder } = c.req.valid("query");
 
-      const products = await getProducts(
-        db,
-        serverCode,
-        pagination.page,
-        pagination.limit,
-      );
+      const options: GetProductsOptions = {
+        page,
+        limit,
+        search,
+        sortBy: sortBy as ProductSortBy,
+        sortOrder: sortOrder as SortOrder,
+      };
+
+      const products = await getProducts(db, serverCode, options);
 
       return c.json(
         {
           products,
-          rowCount: await getProductsCount(db, serverCode),
+          rowCount: await getProductsCount(db, serverCode, search),
           message: "Ürünler başarıyla getirildi",
         },
         200,
