@@ -157,8 +157,8 @@ export function registerAdminRoutes(app: Hono) {
         search: z.string().min(1).optional(),
         sortBy: z
           .enum(["name", "price", "stockCode", "status", "stockQuantity"])
-          .default("name"),
-        sortOrder: z.enum(["asc", "desc"]).default("asc"),
+          .default("stockCode"),
+        sortOrder: z.enum(["asc", "desc"]).default("desc"),
       }),
     ),
     async (c) => {

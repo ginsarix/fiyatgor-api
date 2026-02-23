@@ -65,7 +65,7 @@ export async function registerAuthRoutes(app: Hono) {
       setCookie(c, "session", sessionId, {
         httpOnly: true,
         secure: true,
-        sameSite: "Strict",
+        sameSite: "None",
         path: "/",
         maxAge: sessionExpiration,
       });

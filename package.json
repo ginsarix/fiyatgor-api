@@ -6,15 +6,19 @@
     "test:watch": "vitest",
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
+    "bundle": "esbuild bundle=src/index.ts seeder=src/db/seeder.ts --bundle --format=cjs --platform=node --outdir=dist --external:bcrypt --external:pg-native --external:node-cron && node -e \"require('fs').writeFileSync('dist/package.json', JSON.stringify({name:'fiyatgor-api',dependencies:{bcrypt:require('./package.json').dependencies.bcrypt,'node-cron':require('./package.json').dependencies['node-cron']}},null,2))\"",
+    "test:bundle": "vitest run --config vitest.bundle.config.ts",
     "start": "node dist/index.js",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "db:export": "drizzle-kit export"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.9",
     "@hono/swagger-ui": "^0.5.3",
     "@hono/zod-openapi": "^1.2.2",
     "@hono/zod-validator": "^0.7.6",
+    "@sentry/node": "^10.39.0",
     "axios": "^1.13.4",
     "bcrypt": "^6.0.0",
     "dotenv": "^17.2.3",

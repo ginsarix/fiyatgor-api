@@ -1,0 +1,72 @@
+CREATE TYPE "public"."job_frequency_unit" AS ENUM('minute', 'hour', 'day', 'month');
+CREATE TYPE "public"."product_status" AS ENUM('active', 'passive');
+CREATE TYPE "public"."role" AS ENUM('admin', 'superadmin');
+CREATE TABLE "barcodes" (
+	"id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "barcodes_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 START WITH 1 CACHE 1),
+	"product_id" integer NOT NULL,
+	"dia_key" integer NOT NULL,
+	"barcode" text NOT NULL,
+	CONSTRAINT "barcodes_barcode_unique" UNIQUE("barcode")
+);
+
+CREATE TABLE "firms" (
+	"id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "firms_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 START WITH 1 CACHE 1),
+	"name" text NOT NULL,
+	"dia_server_code" text NOT NULL,
+	"dia_username" text NOT NULL,
+	"dia_password" text NOT NULL,
+	"dia_api_key" text NOT NULL,
+	"dia_firm_code" integer NOT NULL,
+	"dia_period_code" integer DEFAULT 0,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now(),
+	CONSTRAINT "firms_dia_server_code_unique" UNIQUE("dia_server_code")
+);
+
+CREATE TABLE "jobs" (
+	"id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "jobs_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 START WITH 1 CACHE 1),
+	"firm_id" integer NOT NULL,
+	"frequency" integer NOT NULL,
+	"unit" "job_frequency_unit" NOT NULL,
+	"last_ran_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now(),
+	CONSTRAINT "jobs_firm_id_unique" UNIQUE("firm_id")
+);
+
+CREATE TABLE "products" (
+	"id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "products_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 START WITH 1 CACHE 1),
+	"firm_id" integer NOT NULL,
+	"dia_key" integer NOT NULL,
+	"stock_code" varchar(26) NOT NULL,
+	"name" text NOT NULL,
+	"price" numeric(18, 4) NOT NULL,
+	"currency" char(3),
+	"vat" integer,
+	"stock_quantity" integer DEFAULT 0 NOT NULL,
+	"status" "product_status" NOT NULL,
+	"min_quantity" integer DEFAULT 1 NOT NULL,
+	"unit" text DEFAULT 'AD' NOT NULL,
+	"image" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now(),
+	CONSTRAINT "products_dia_key_unique" UNIQUE("dia_key"),
+	CONSTRAINT "products_stock_code_unique" UNIQUE("stock_code")
+);
+
+CREATE TABLE "users" (
+	"id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "users_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 START WITH 1 CACHE 1),
+	"firm_id" integer NOT NULL,
+	"name" text NOT NULL,
+	"email" varchar(255) NOT NULL,
+	"password" text NOT NULL,
+	"role" "role" DEFAULT 'admin' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now(),
+	CONSTRAINT "users_email_unique" UNIQUE("email")
+);
+
+ALTER TABLE "barcodes" ADD CONSTRAINT "barcodes_product_id_products_id_fk" FOREIGN KEY ("product_id") REFERENCES "public"."products"("id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "jobs" ADD CONSTRAINT "jobs_firm_id_firms_id_fk" FOREIGN KEY ("firm_id") REFERENCES "public"."firms"("id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "products" ADD CONSTRAINT "products_firm_id_firms_id_fk" FOREIGN KEY ("firm_id") REFERENCES "public"."firms"("id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "users" ADD CONSTRAINT "users_firm_id_firms_id_fk" FOREIGN KEY ("firm_id") REFERENCES "public"."firms"("id") ON DELETE cascade ON UPDATE no action;

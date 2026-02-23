@@ -104,19 +104,21 @@ const { values } = parseArgs({
 
 const tableParamValue = values.table;
 
-if (typeof tableParamValue === "string") {
-  if (["firms", "firm"].includes(tableParamValue)) {
-    await seedDemoFirm();
-  } else if (["users", "user"].includes(tableParamValue)) {
-    await seedDefaultAdminUser();
-  } else {
-    console.error(`${tableParamValue} is not an option`);
+(async () => {
+  if (typeof tableParamValue === "string") {
+    if (["firms", "firm"].includes(tableParamValue)) {
+      await seedDemoFirm();
+    } else if (["users", "user"].includes(tableParamValue)) {
+      await seedDefaultAdminUser();
+    } else {
+      console.error(`${tableParamValue} is not an option`);
 
+      process.exit(1);
+    }
+
+    process.exit(0);
+  } else {
+    console.error("value of table parameter is invalid");
     process.exit(1);
   }
-
-  process.exit(0);
-} else {
-  console.error("value of table parameter is invalid");
-  process.exit(1);
-}
+})();

@@ -4,6 +4,7 @@ import {
   count,
   desc,
   eq,
+  exists,
   ilike,
   notInArray,
   or,
@@ -239,8 +240,8 @@ export async function getProducts(
     page = 1,
     limit = 20,
     search,
-    sortBy = "name",
-    sortOrder = "asc",
+    sortBy = "stockCode",
+    sortOrder = "desc",
   }: GetProductsOptions = {},
 ): Promise<
   { products: InsertableProduct; barcodes: InsertableBarcode | null }[] | null
@@ -259,6 +260,17 @@ export async function getProducts(
     ? or(
         ilike(productsTable.name, `%${search}%`),
         ilike(productsTable.stockCode, `%${search}%`),
+        exists(
+          db
+            .select()
+            .from(barcodesTable)
+            .where(
+              and(
+                eq(barcodesTable.productId, productsTable.id),
+                ilike(barcodesTable.barcode, `%${search}%`),
+              ),
+            ),
+        ),
       )
     : undefined;
 
@@ -272,7 +284,7 @@ export async function getProducts(
     .from(productsTable)
     .leftJoin(barcodesTable, eq(barcodesTable.productId, productsTable.id))
     .where(whereClause)
-    .orderBy(orderFn(sortColumn))
+    .orderBy(orderFn(sortColumn), asc(barcodesTable.barcode))
     .limit(limit)
     .offset(offset);
 
