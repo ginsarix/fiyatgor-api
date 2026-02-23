@@ -30,28 +30,28 @@ export async function setSession(
   serverCode: string,
   role: "admin" | "superadmin",
   name: string,
-): Promise<UUID | null> {
+): Promise<UUID> {
   const sessionId = crypto.randomUUID();
   const sessionHashKey = `${sessionKey}:${sessionId}`;
   const userSessionRedisKey = `${userSessionKey}:${userId}`;
 
-  const result = await redis
-    .multi()
+  // check existing session
+  const oldSessionId = await redis.get(userSessionRedisKey);
+
+  const multi = redis.multi();
+
+  if (oldSessionId) {
+    multi.del(`${sessionKey}:${oldSessionId}`);
+  }
+
+  multi
     .hSet(sessionHashKey, { name, serverCode, role, userId })
     .expire(sessionHashKey, sessionExpiration)
     .set(userSessionRedisKey, sessionId, {
       expiration: { type: "EX", value: sessionExpiration },
-      condition: "NX", // only set non-conflicting
-    })
-    .exec();
+    });
 
-  const setResult = result[2];
-  // the type of the setResult is wrong,
-  // when tested in runtime it can be seen that the condition below does work properly when a conflicting record is trying to be inserted.
-  if (setResult === null) {
-    await redis.del(sessionHashKey);
-    return null;
-  }
+  await multi.exec();
 
   return sessionId;
 }
