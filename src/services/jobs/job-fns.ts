@@ -26,8 +26,6 @@ export async function runProductSyncJob(
     .update(jobsTable)
     .set({ lastRanAt: new Date() })
     .where(eq(jobsTable.id, jobId));
-
-  console.log("Job completed");
 }
 
 export async function loadJobsFromDB(db: DB) {

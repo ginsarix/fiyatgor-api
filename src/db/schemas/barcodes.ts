@@ -3,7 +3,7 @@ import { integer, pgTable, text } from "drizzle-orm/pg-core";
 import { productsTable } from "./products.js";
 
 export const barcodesTable = pgTable("barcodes", {
-  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  id: integer().primaryKey().generatedByDefaultAsIdentity(), // the upsert sometimes inserts ids idk man
   productId: integer("product_id")
     .references(() => productsTable.id, { onDelete: "cascade" })
     .notNull(),

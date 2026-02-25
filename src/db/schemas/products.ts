@@ -18,7 +18,7 @@ export const productStatusEnum = pgEnum("product_status", [
 ]);
 
 export const productsTable = pgTable("products", {
-  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  id: integer().primaryKey().generatedByDefaultAsIdentity(), // the upsert sometimes inserts ids idk man
   firmId: integer("firm_id")
     .references(() => firmsTable.id, { onDelete: "cascade" })
     .notNull(),
