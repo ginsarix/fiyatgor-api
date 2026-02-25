@@ -247,7 +247,7 @@ export function registerAdminRoutes(app: Hono) {
 
       const [updatedFirm] = await db
         .update(firmsTable)
-        .set(formInput)
+        .set({ ...formInput, diaApiKey: formInput.diaApiKey ?? "" })
         .where(eq(firmsTable.id, firmId))
         .returning();
 

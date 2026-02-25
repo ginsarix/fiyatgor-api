@@ -14,7 +14,7 @@ export const firmFormValidation = z.object({
   diaServerCode: z.string().min(1),
   diaUsername: z.string().min(1),
   diaPassword: z.string().min(1),
-  diaApiKey: z.string().min(1),
+  diaApiKey: z.string().nullish(),
   diaFirmCode: z.number().int().positive(),
   diaPeriodCode: z.number().int().nonnegative().nullish(),
 });

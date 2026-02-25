@@ -97,7 +97,7 @@ export function registerSuperAdminRoutes(app: Hono) {
     );
   });
 
-  app.get("/superadmin/firm/:id", async (c) => {
+  app.get("/superadmin/firms/:id", async (c) => {
     const id = c.req.param("id");
 
     const [firm] = await db
@@ -108,6 +108,51 @@ export function registerSuperAdminRoutes(app: Hono) {
     if (!firm) return c.json({ message: "Firma bulunamadı" }, 404);
 
     return c.json({ message: "Firma başarıyla getirildi" }, 200);
+  });
+
+  app.patch(
+    "/superadmin/firms/:id",
+    zValidator("json", firmFormValidation.partial()),
+    async (c) => {
+      const id = c.req.param("id");
+      const input = c.req.valid("json");
+
+      const [firm] = await db
+        .select()
+        .from(firmsTable)
+        .where(eq(firmsTable.id, Number(id)));
+
+      if (!firm) return c.json({ message: "Firma bulunamadı" }, 404);
+
+      const [updatedFirm] = await db
+        .update(firmsTable)
+        .set({ ...input, diaApiKey: input.diaApiKey ?? "" })
+        .where(eq(firmsTable.id, Number(id)))
+        .returning();
+
+      return c.json(
+        {
+          message: "Firma başarıyla güncellendi",
+          updatedFirm: { ...updatedFirm, diaPassword: undefined },
+        },
+        200,
+      );
+    },
+  );
+
+  app.delete("/superadmin/firms/:id", async (c) => {
+    const id = c.req.param("id");
+
+    const [firm] = await db
+      .select()
+      .from(firmsTable)
+      .where(eq(firmsTable.id, Number(id)));
+
+    if (!firm) return c.json({ message: "Firma bulunamadı" }, 404);
+
+    await db.delete(firmsTable).where(eq(firmsTable.id, Number(id)));
+
+    return c.json({ message: "Firma başarıyla silindi" }, 200);
   });
 
   app.post(
@@ -123,6 +168,7 @@ export function registerSuperAdminRoutes(app: Hono) {
         .insert(firmsTable)
         .values({
           ...input.firm,
+          diaApiKey: input.firm.diaApiKey ?? "",
           diaPassword: aesEncrypt(input.firm.diaPassword),
         })
         .returning();
