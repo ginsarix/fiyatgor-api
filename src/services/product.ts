@@ -6,6 +6,7 @@ import {
   eq,
   exists,
   ilike,
+  inArray,
   notInArray,
   or,
   sql,
@@ -279,16 +280,27 @@ export async function getProducts(
   const orderFn = sortOrder === "desc" ? desc : asc;
   const sortColumn = SORT_COLUMNS[sortBy];
 
-  const existingProducts = await db
+  const baseProducts = await db
     .select()
     .from(productsTable)
-    .leftJoin(barcodesTable, eq(barcodesTable.productId, productsTable.id))
     .where(whereClause)
-    .orderBy(orderFn(sortColumn), asc(barcodesTable.barcode))
+    .orderBy(orderFn(sortColumn))
     .limit(limit)
     .offset(offset);
 
-  return existingProducts;
+  const productsWithBarcodes = await db
+    .select()
+    .from(productsTable)
+    .leftJoin(barcodesTable, eq(barcodesTable.productId, productsTable.id))
+    .where(
+      inArray(
+        productsTable.id,
+        baseProducts.map((p) => p.id),
+      ),
+    )
+    .orderBy(asc(barcodesTable.barcode));
+
+  return productsWithBarcodes;
 }
 
 export async function getProductsCount(
