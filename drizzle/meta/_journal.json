@@ -64,6 +64,13 @@
       "when": 1771999631247,
       "tag": "0008_tan_the_fallen",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1775049605307,
+      "tag": "0009_pale_johnny_storm",
+      "breakpoints": true
     }
   ]
 }

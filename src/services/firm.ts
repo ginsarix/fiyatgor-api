@@ -19,5 +19,10 @@ export async function getFirmIdByServerCode(db: DB, serverCode: string) {
 }
 
 export async function getFirmById(db: DB, id: number) {
-  return await db.select().from(firmsTable).where(eq(firmsTable.id, id));
+  const [firm] = await db
+    .select()
+    .from(firmsTable)
+    .where(eq(firmsTable.id, id));
+
+  return firm;
 }

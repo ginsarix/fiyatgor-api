@@ -32,3 +32,5 @@ lerna-debug.log*
 dist
 
 full_schema.sql
+
+uploads

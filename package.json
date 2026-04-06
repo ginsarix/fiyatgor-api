@@ -9,9 +9,9 @@
     "bundle": "esbuild bundle=src/index.ts seeder=src/db/seeder.ts --bundle --format=cjs --platform=node --outdir=dist --external:bcrypt --external:pg-native --external:node-cron && node -e \"require('fs').writeFileSync('dist/package.json', JSON.stringify({name:'fiyatgor-api',dependencies:{bcrypt:require('./package.json').dependencies.bcrypt,'node-cron':require('./package.json').dependencies['node-cron']}},null,2))\"",
     "test:bundle": "vitest run --config vitest.bundle.config.ts",
     "start": "node dist/index.js",
-    "db:generate": "drizzle-kit generate",
+    "db:generate": "NODE_OPTIONS='--import tsx' drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:export": "drizzle-kit export"
+    "db:export": "NODE_OPTIONS='--import tsx' drizzle-kit export"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.9",
@@ -23,7 +23,10 @@
     "bcrypt": "^6.0.0",
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.1",
+    "file-type": "^22.0.0",
     "hono": "^4.11.7",
+    "mime-types": "^3.0.2",
+    "nanoid": "^5.1.7",
     "node-cron": "^4.2.1",
     "pg": "^8.17.2",
     "redis": "^5.10.0",
@@ -32,7 +35,8 @@
   "devDependencies": {
     "@biomejs/biome": "2.3.13",
     "@types/bcrypt": "^6.0.0",
-    "@types/node": "^20.11.17",
+    "@types/mime-types": "^3.0.1",
+    "@types/node": "^22.13.14",
     "@types/pg": "^8.16.0",
     "drizzle-kit": "^0.31.8",
     "tsx": "^4.7.1",

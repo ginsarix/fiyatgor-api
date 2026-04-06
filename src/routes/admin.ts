@@ -1,13 +1,18 @@
+import { unlink } from "node:fs/promises";
 import { zValidator } from "@hono/zod-validator";
 import { hash as bcryptHash } from "bcrypt";
 import { count, eq } from "drizzle-orm";
+import { fileTypeFromBuffer } from "file-type";
 import type { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 import { db } from "../db/index.js";
+import { catalogsTable } from "../db/schemas/catalogs.js";
 import { firmsTable } from "../db/schemas/firms.js";
 import { jobsTable } from "../db/schemas/jobs.js";
 import { usersTable } from "../db/schemas/users.js";
 import { adminAuth, firmAuth } from "../middlewares/auth.js";
+import { getFirmById } from "../services/firm.js";
 import { runProductSyncJob } from "../services/jobs/job-fns.js";
 import { createJob, deleteJob } from "../services/jobs/scheduler.js";
 import type {
@@ -21,6 +26,8 @@ import {
   loadProducts,
 } from "../services/product.js";
 import { toCronExpression } from "../utils/cron.js";
+import { createFile, getFilePath } from "../utils/file.js";
+import { hash } from "../utils/sha256.js";
 import {
   firmFormValidation,
   jobValidation,
@@ -258,6 +265,70 @@ export function registerAdminRoutes(app: Hono) {
         },
         200,
       );
+    },
+  );
+
+  app.post(
+    "/admin/catalog",
+    adminAuth,
+    firmAuth,
+    bodyLimit({ maxSize: 50 * 1024 * 1024 /* 50 MiB */ }),
+    async (c) => {
+      const { id: firmId } = c.get("firm");
+      const { diaServerCode: serverCode } = await getFirmById(db, firmId);
+
+      const body = await c.req.parseBody();
+
+      const file = body["file"];
+
+      if (!(file instanceof File)) {
+        return c.json({ message: "Dosya gereklidir" }, 400);
+      }
+
+      const fileBuffer = await file.arrayBuffer();
+      const fileBytes = new Uint8Array(fileBuffer);
+
+      const fileHash = hash(fileBytes);
+
+      const [existingCatalog] = await db
+        .select()
+        .from(catalogsTable)
+        .where(eq(catalogsTable.fileHash, fileHash));
+
+      const buildResponse = (filename: string) => {
+        c.header("Location", `/servers/${serverCode}/catalog`);
+        return c.json(
+          { filename, message: "Katalog resmi başarıyla yüklendi" },
+          201,
+        );
+      };
+
+      if (!existingCatalog) {
+        const [deletedCatalog] = await db
+          .delete(catalogsTable)
+          .where(eq(catalogsTable.firmId, firmId))
+          .returning({ filename: catalogsTable.filename });
+
+        if (deletedCatalog) {
+          await unlink(getFilePath(deletedCatalog.filename));
+        }
+
+        const detected = await fileTypeFromBuffer(fileBytes);
+        if (!detected || !detected.mime.startsWith("image/")) {
+          return c.json({ error: "Sadece resim dosyaları kabul edilir." }, 415);
+        }
+
+        const createdFilename = await createFile(file, detected.ext);
+        await db.insert(catalogsTable).values({
+          firmId,
+          filename: createdFilename,
+          fileHash,
+        });
+
+        return buildResponse(createdFilename);
+      }
+
+      return buildResponse(existingCatalog.filename);
     },
   );
 }
