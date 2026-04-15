@@ -1,14 +1,17 @@
 import { unlink } from "node:fs/promises";
 import { zValidator } from "@hono/zod-validator";
 import { hash as bcryptHash } from "bcrypt";
-import { count, eq } from "drizzle-orm";
+import { count, DrizzleQueryError, eq } from "drizzle-orm";
 import { fileTypeFromBuffer } from "file-type";
 import type { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { HTTPException } from "hono/http-exception";
+import { DatabaseError } from "pg";
 import { z } from "zod";
+import { firmsConstraintErrors } from "../constants/messages.js";
 import { db } from "../db/index.js";
 import { catalogsTable } from "../db/schemas/catalogs.js";
-import { firmsTable } from "../db/schemas/firms.js";
+import { firmsTable, type SelectableFirm } from "../db/schemas/firms.js";
 import { jobsTable } from "../db/schemas/jobs.js";
 import { usersTable } from "../db/schemas/users.js";
 import { adminAuth, firmAuth } from "../middlewares/auth.js";
@@ -25,6 +28,7 @@ import {
   getProductsCount,
   loadProducts,
 } from "../services/product.js";
+import { aesEncrypt } from "../utils/aes-256-gcm.js";
 import { toCronExpression } from "../utils/cron.js";
 import { createFile, getFilePath } from "../utils/file.js";
 import { hash } from "../utils/sha256.js";
@@ -44,7 +48,11 @@ export function registerAdminRoutes(app: Hono) {
       {
         scf_stokkart_detay_listele: { firma_kodu: firm.diaFirmCode },
       },
-      firm.id,
+      {
+        firmId: firm.id,
+        priceField: firm.priceField,
+        maxProductNameCharacters: firm.maxProductNameCharacters,
+      },
     );
 
     await db
@@ -85,7 +93,11 @@ export function registerAdminRoutes(app: Hono) {
               firm.diaServerCode,
               firm.diaFirmCode,
               insertedJob.id,
-              firm.id,
+              {
+                firmId: firm.id,
+                priceField: firm.priceField,
+                maxProductNameCharacters: firm.maxProductNameCharacters,
+              },
             ).catch((err) => console.error("Job failed: ", err)),
         );
 
@@ -108,7 +120,11 @@ export function registerAdminRoutes(app: Hono) {
           firm.diaServerCode,
           firm.diaFirmCode,
           updatedJob.id,
-          firm.id,
+          {
+            firmId: firm.id,
+            priceField: firm.priceField,
+            maxProductNameCharacters: firm.maxProductNameCharacters,
+          },
         ).catch((err) => console.error("Job failed: ", err)),
       );
 
@@ -252,11 +268,38 @@ export function registerAdminRoutes(app: Hono) {
 
       const formInput = c.req.valid("json");
 
-      const [updatedFirm] = await db
-        .update(firmsTable)
-        .set({ ...formInput, diaApiKey: formInput.diaApiKey ?? "" })
-        .where(eq(firmsTable.id, firmId))
-        .returning();
+      let updatedFirm: SelectableFirm;
+
+      try {
+        [updatedFirm] = await db
+          .update(firmsTable)
+          .set({
+            ...formInput,
+            diaPassword:
+              formInput.diaPassword && aesEncrypt(formInput.diaPassword),
+            diaApiKey: formInput.diaApiKey ?? "",
+          })
+          .where(eq(firmsTable.id, firmId))
+          .returning();
+      } catch (error) {
+        if (error instanceof DrizzleQueryError) {
+          if (error.cause instanceof DatabaseError) {
+            if (error.cause.code === "23505") {
+              const message = error.cause.constraint
+                ? firmsConstraintErrors[
+                    error.cause.constraint as keyof typeof firmsConstraintErrors
+                  ]
+                : "Çakışma hatası";
+
+              throw new HTTPException(409, {
+                message,
+              });
+            }
+          }
+        }
+
+        throw error;
+      }
 
       return c.json(
         {

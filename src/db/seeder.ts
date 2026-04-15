@@ -27,6 +27,7 @@ async function seedDemoFirm(redirectedByUserSeeder = false) {
   const [{ firmId }] = await db
     .insert(firmsTable)
     .values({
+      firmCode: "00001",
       name: "DIA Demo",
       diaServerCode: "diademo",
       diaFirmCode: 34,

@@ -1,0 +1,1 @@
+ALTER TABLE "products" ALTER COLUMN "stock_code" SET DATA TYPE text;

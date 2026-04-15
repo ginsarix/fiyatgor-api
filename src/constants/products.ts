@@ -4,7 +4,6 @@
  * - stokkartkodu: stockCode
  * - m_birimler: for the barcodes table (we dont include it in the selected columns because it will always be in the response anyway)
  * - aciklama: name
- * - fiyat1: price
  * - doviz1: currency
  * - kdvsatis: vat
  * - durum: status
@@ -12,15 +11,14 @@
  * - birimadi: unit
  * - aws_url: image
  */
-export const SELECTED_COLUMNS = [
+export const SELECTED_COLUMNS_BASE = [
   "_key",
   "stokkartkodu",
   "aciklama",
-  "fiyat1",
   "doviz1",
   "kdvsatis",
   "durum",
   "minsiparismiktari",
   "birimadi",
   "aws_url",
-];
+] as const;

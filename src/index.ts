@@ -15,6 +15,8 @@ import { registerRoutes } from "./routes/index.js";
 import { loadJobsFromDB } from "./services/jobs/job-fns.js";
 
 const app = new Hono().onError((err, c) => {
+  console.error(err);
+
   // Report _all_ unhandled errors.
   Sentry.captureException(err);
   if (err instanceof HTTPException) {

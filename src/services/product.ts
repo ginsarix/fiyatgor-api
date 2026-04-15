@@ -5,6 +5,7 @@ import {
   desc,
   eq,
   exists,
+  type InferEnum,
   ilike,
   inArray,
   notInArray,
@@ -12,13 +13,12 @@ import {
   sql,
 } from "drizzle-orm";
 import { ONLY_ACTIVE_FILTER } from "../constants/dia.js";
-import { SELECTED_COLUMNS } from "../constants/products.js";
 import type { DB } from "../db/index.js";
 import {
   barcodesTable,
   type InsertableBarcode,
 } from "../db/schemas/barcodes.js";
-import { firmsTable } from "../db/schemas/firms.js";
+import { firmsTable, type priceFieldEnum } from "../db/schemas/firms.js";
 import {
   type InsertableProduct,
   productsTable,
@@ -27,6 +27,7 @@ import {
 import { dia } from "../helpers/dia.js";
 import type { DiaListRequest } from "../types/dia-requests.js";
 import type { DiaResponse, DiaStock } from "../types/dia-responses.js";
+import { buildSelectedProductColumns } from "../utils/dia.js";
 
 function extractBarcodesWithRelation(
   stocks: DiaStock[],
@@ -67,13 +68,18 @@ function extractBarcodesWithRelation(
   return results;
 }
 
-export async function saveProducts(db: DB, stocks: DiaStock[], firmId: number) {
+export async function saveProducts(
+  db: DB,
+  stocks: DiaStock[],
+  firmId: number,
+  priceField: InferEnum<typeof priceFieldEnum>,
+) {
   const products: InsertableProduct[] = stocks.map((s) => ({
     firmId,
     diaKey: Number(s._key),
     stockCode: s.stokkartkodu,
     name: s.aciklama,
-    price: s.fiyat1,
+    price: s[priceField] ?? "",
     currency: s.doviz1,
     vat: Number(s.kdvsatis),
     status: s.durum === "A" ? "active" : "passive",
@@ -144,10 +150,11 @@ export async function saveProducts(db: DB, stocks: DiaStock[], firmId: number) {
           inserted: sql<boolean>`xmax = 0`,
         });
 
-      insertedProductRowsCount += upsertedProducts.filter(
-        (r) => r.inserted,
-      ).length;
-      updatedProductRowsCount += upsertedProducts.length;
+      const insertedCount = upsertedProducts.filter((r) => r.inserted).length;
+      const updatedCount = upsertedProducts.length - insertedCount;
+
+      insertedProductRowsCount += insertedCount;
+      updatedProductRowsCount += updatedCount;
 
       const barcodesWithRelation = extractBarcodesWithRelation(
         stocks,
@@ -170,8 +177,11 @@ export async function saveProducts(db: DB, stocks: DiaStock[], firmId: number) {
             inserted: sql<boolean>`xmax = 0`,
           });
 
-        insertedBarcodeRowsCount += result.length;
-        updatedBarcodeRowsCount += result.filter((r) => r.inserted).length;
+        const insertedCount = result.filter((r) => r.inserted).length;
+        const updatedCount = result.length - insertedCount;
+
+        insertedBarcodeRowsCount += insertedCount;
+        updatedBarcodeRowsCount += updatedCount;
       }
     });
   }
@@ -331,33 +341,31 @@ export async function getProductsCount(
   return result.count;
 }
 
+export type LoadProductsFirmParam = {
+  firmId: number;
+  priceField: InferEnum<typeof priceFieldEnum>;
+  maxProductNameCharacters: number | null;
+};
+
 export async function loadProducts(
   db: DB,
   serverCode: string,
   request: GetProductsRequest,
-  firmId?: number,
+  firmInfo?: LoadProductsFirmParam,
 ) {
-  const listele = request.scf_stokkart_detay_listele;
-
-  const finalRequest: GetProductsRequest = {
-    scf_stokkart_detay_listele: {
-      ...listele,
-      filters: [ONLY_ACTIVE_FILTER],
-      params: {
-        ...listele.params,
-        selectedcolumns: listele.params?.selectedcolumns?.length
-          ? listele.params.selectedcolumns
-          : SELECTED_COLUMNS,
-      },
-    },
-  };
-
-  let finalFirmId = firmId;
+  let finalFirmId = firmInfo?.firmId;
+  let finalPriceField = firmInfo?.priceField ?? "fiyat1";
+  let finalMaxProductNameCharacters =
+    firmInfo?.maxProductNameCharacters ?? null;
 
   if (!finalFirmId) {
     // get the firm id using serverCode
     const [firm] = await db
-      .select({ firmId: firmsTable.id })
+      .select({
+        firmId: firmsTable.id,
+        priceField: firmsTable.priceField,
+        maxProductNameCharacters: firmsTable.maxProductNameCharacters,
+      })
       .from(firmsTable)
       .where(eq(firmsTable.diaServerCode, serverCode));
 
@@ -368,14 +376,40 @@ export async function loadProducts(
     }
 
     finalFirmId = firm.firmId;
+    finalPriceField = firm.priceField;
+    finalMaxProductNameCharacters = firm.maxProductNameCharacters;
   }
+
+  const listele = request.scf_stokkart_detay_listele;
+
+  const finalRequest: GetProductsRequest = {
+    scf_stokkart_detay_listele: {
+      ...listele,
+      filters: [ONLY_ACTIVE_FILTER],
+      params: {
+        ...listele.params,
+        selectedcolumns: listele.params?.selectedcolumns?.length
+          ? listele.params.selectedcolumns
+          : buildSelectedProductColumns(finalPriceField),
+      },
+    },
+  };
 
   const fetchedProducts = await dia<
     GetProductsRequestServiceName,
     DiaResponse<DiaStock[]>
   >(db, { module: "scf", serverCode }, finalRequest);
 
-  return await saveProducts(db, fetchedProducts.result, finalFirmId);
+  const finalProducts =
+    finalMaxProductNameCharacters !== null
+      ? fetchedProducts.result.map((p) => ({
+          ...p,
+          aciklama:
+            p.aciklama?.slice(undefined, finalMaxProductNameCharacters) ?? "",
+        }))
+      : fetchedProducts.result;
+
+  return await saveProducts(db, finalProducts, finalFirmId, finalPriceField);
 }
 
 export const findProductByAnyBarcode = (

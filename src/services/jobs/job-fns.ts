@@ -3,7 +3,7 @@ import type { DB } from "../../db/index.js";
 import { firmsTable } from "../../db/schemas/firms.js";
 import { jobsTable } from "../../db/schemas/jobs.js";
 import { toCronExpression } from "../../utils/cron.js";
-import { loadProducts } from "../product.js";
+import { type LoadProductsFirmParam, loadProducts } from "../product.js";
 import { createJob } from "./scheduler.js";
 
 export async function runProductSyncJob(
@@ -11,7 +11,7 @@ export async function runProductSyncJob(
   serverCode: string,
   firmCode: number,
   jobId: number,
-  firmId?: number,
+  firmInfo?: LoadProductsFirmParam,
 ) {
   await loadProducts(
     db,
@@ -19,7 +19,7 @@ export async function runProductSyncJob(
     {
       scf_stokkart_detay_listele: { firma_kodu: firmCode },
     },
-    firmId,
+    firmInfo,
   );
 
   await db
@@ -36,13 +36,11 @@ export async function loadJobsFromDB(db: DB) {
 
   for (const { jobs, firms } of rows) {
     createJob(jobs.id, toCronExpression(jobs.frequency, jobs.unit), () =>
-      runProductSyncJob(
-        db,
-        firms.diaServerCode,
-        firms.diaFirmCode,
-        jobs.id,
-        jobs.firmId,
-      ).catch((err) => console.error("Job failed: ", err)),
+      runProductSyncJob(db, firms.diaServerCode, firms.diaFirmCode, jobs.id, {
+        firmId: jobs.firmId,
+        priceField: firms.priceField,
+        maxProductNameCharacters: firms.maxProductNameCharacters,
+      }).catch((err) => console.error("Job failed: ", err)),
     );
   }
 }

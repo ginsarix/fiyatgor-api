@@ -9,11 +9,17 @@ import { z } from "zod";
 import { catalogNotFoundPageHTML } from "../constants/html.js";
 import { db } from "../db/index.js";
 import { catalogsTable } from "../db/schemas/catalogs.js";
-import { getFirmIdByServerCode } from "../services/firm.js";
+import {
+  getFirmIdByFirmCode,
+  getFirmIdByServerCode,
+} from "../services/firm.js";
 import { findProductByAnyBarcode } from "../services/product.js";
 import { isErrnoException } from "../utils/error.js";
 import { getFilePath } from "../utils/file.js";
-import { serverCodeValidation } from "../validations/zod.js";
+import {
+  firmCodeValidation,
+  serverCodeValidation,
+} from "../validations/zod.js";
 
 export function registerPublicRoutes(app: Hono) {
   app.get(
@@ -36,6 +42,40 @@ export function registerPublicRoutes(app: Hono) {
       if (!firmId) {
         return c.json(
           { message: `${serverCode} sunucu kodlu bir firma bulunamadı` },
+          404,
+        );
+      }
+
+      const product = await findProductByAnyBarcode(db, firmId, barcode);
+
+      if (!product) return c.json({ message: "Ürün bulunamadı" }, 404);
+
+      return c.json({
+        product,
+        message: "Eşleşen ürün başarıyla getirildi",
+      });
+    },
+  );
+  app.get(
+    "/firms/:firmCode/products/:barcode",
+    zValidator(
+      "param",
+      z.object({
+        firmCode: firmCodeValidation,
+        barcode: z
+          .string()
+          .min(1, { error: "Barkod boş olamaz!" })
+          .max(48, { error: "Barkod 48 harfden daha fazla olamaz!" }),
+      }),
+    ),
+    async (c) => {
+      const { firmCode, barcode } = c.req.valid("param");
+
+      const firmId = await getFirmIdByFirmCode(db, firmCode);
+
+      if (!firmId) {
+        return c.json(
+          { message: `${firmCode} firma kodlu bir firma bulunamadı` },
           404,
         );
       }
@@ -98,12 +138,7 @@ export function registerPublicRoutes(app: Hono) {
 
   app.get(
     "/servers/:serverCode/catalog",
-    zValidator(
-      "param",
-      z.object({
-        serverCode: serverCodeValidation,
-      }),
-    ),
+    zValidator("param", z.object({ serverCode: serverCodeValidation })),
     async (c) => {
       const { serverCode } = c.req.valid("param");
 
@@ -118,9 +153,39 @@ export function registerPublicRoutes(app: Hono) {
 
       if (!catalog) return c.html(catalogNotFoundPageHTML, 404);
 
-      // I used 2 endpoints for this operation, this one is basically a resolver that only requires a serverCode so that we can get the server's catalog image filename
+      // I used 2 endpoints for this operation, this one is basically a resolver that only requires a firmCode so that we can get the firms's catalog image filename
       // and then redirect to the endpoint that actually gives you the file via the given filename
-      // this way the client doesn't have to know the filename to get the server's catalog,
+      // this way the client doesn't have to know the filename to get the firm's catalog,
+      // while also allowing us to use immutable caching with proper revalidation via versioning (our filenames are unique).
+      return c.redirect(`/catalog/${catalog.filename}`);
+    },
+  );
+
+  app.get(
+    "/firms/:firmCode/catalog",
+    zValidator(
+      "param",
+      z.object({
+        firmCode: firmCodeValidation,
+      }),
+    ),
+    async (c) => {
+      const { firmCode } = c.req.valid("param");
+
+      const firmId = await getFirmIdByFirmCode(db, firmCode);
+
+      if (!firmId) return c.html(catalogNotFoundPageHTML, 404);
+
+      const [catalog] = await db
+        .select()
+        .from(catalogsTable)
+        .where(eq(catalogsTable.firmId, firmId));
+
+      if (!catalog) return c.html(catalogNotFoundPageHTML, 404);
+
+      // I used 2 endpoints for this operation, this one is basically a resolver that only requires a firmCode so that we can get the firms's catalog image filename
+      // and then redirect to the endpoint that actually gives you the file via the given filename
+      // this way the client doesn't have to know the filename to get the firm's catalog,
       // while also allowing us to use immutable caching with proper revalidation via versioning (our filenames are unique).
       return c.redirect(`/catalog/${catalog.filename}`);
     },

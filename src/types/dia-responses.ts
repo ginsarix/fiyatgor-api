@@ -1,3 +1,6 @@
+import type { InferEnum } from "drizzle-orm";
+import type { priceFieldEnum } from "../db/schemas/firms.js";
+
 export type DiaResponse<T> = {
   code: string;
   result: T;
@@ -21,13 +24,12 @@ export type DiaStock = {
   stokkartkodu: string;
   m_birimler: { __barkodlar: { barkod: string }[] }[];
   aciklama: string;
-  fiyat1: string;
   doviz1: string;
   kdvsatis: string;
   durum: "A" | "P";
   minsiparismiktari: string;
   birimadi: string;
   aws_url: string;
-};
+} & Partial<{ [K in InferEnum<typeof priceFieldEnum>]: string }>;
 
 export type DiaStockListResponse = DiaResponse<DiaStock[]>;

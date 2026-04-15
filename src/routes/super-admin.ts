@@ -1,10 +1,13 @@
 import { zValidator } from "@hono/zod-validator";
 import { hash as bcryptHash } from "bcrypt";
-import { eq } from "drizzle-orm";
+import { DrizzleQueryError, eq } from "drizzle-orm";
 import type { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
+import { DatabaseError } from "pg";
 import { z } from "zod";
+import { firmsConstraintErrors } from "../constants/messages.js";
 import { db } from "../db/index.js";
-import { firmsTable } from "../db/schemas/firms.js";
+import { firmsTable, type SelectableFirm } from "../db/schemas/firms.js";
 import { jobsTable } from "../db/schemas/jobs.js";
 import { usersTable } from "../db/schemas/users.js";
 import { runProductSyncJob } from "../services/jobs/job-fns.js";
@@ -84,6 +87,7 @@ export function registerSuperAdminRoutes(app: Hono) {
 
     const strippedFirms = firms.map((f) => ({
       id: f.id,
+      firmCode: f.firmCode,
       name: f.name,
       diaServerCode: f.diaServerCode,
       diaFirmCode: f.diaFirmCode,
@@ -164,14 +168,36 @@ export function registerSuperAdminRoutes(app: Hono) {
     async (c) => {
       const input = c.req.valid("json");
 
-      const [createdFirm] = await db
-        .insert(firmsTable)
-        .values({
-          ...input.firm,
-          diaApiKey: input.firm.diaApiKey ?? "",
-          diaPassword: aesEncrypt(input.firm.diaPassword),
-        })
-        .returning();
+      let createdFirm: SelectableFirm;
+
+      try {
+        [createdFirm] = await db
+          .insert(firmsTable)
+          .values({
+            ...input.firm,
+            diaApiKey: input.firm.diaApiKey ?? "",
+            diaPassword: aesEncrypt(input.firm.diaPassword),
+          })
+          .returning();
+      } catch (error) {
+        if (error instanceof DrizzleQueryError) {
+          if (error.cause instanceof DatabaseError) {
+            if (error.cause.code === "23505") {
+              const message = error.cause.constraint
+                ? firmsConstraintErrors[
+                    error.cause.constraint as keyof typeof firmsConstraintErrors
+                  ]
+                : "Çakışma hatası";
+
+              throw new HTTPException(409, {
+                message,
+              });
+            }
+          }
+        }
+
+        throw error;
+      }
 
       if (input.job) {
         const [createdJob] = await db
@@ -188,7 +214,11 @@ export function registerSuperAdminRoutes(app: Hono) {
               createdFirm.diaServerCode,
               createdFirm.diaFirmCode,
               createdJob.id,
-              createdFirm.id,
+              {
+                firmId: createdFirm.id,
+                priceField: createdFirm.priceField,
+                maxProductNameCharacters: createdFirm.maxProductNameCharacters,
+              },
             ),
         );
       }

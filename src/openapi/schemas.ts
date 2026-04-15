@@ -170,7 +170,9 @@ export const ProductSchema = z
     diaKey: z.number().int(),
     stockCode: z.string(),
     name: z.string(),
-    price: z.string().describe("Decimal value as string (precision 18, scale 4)"),
+    price: z
+      .string()
+      .describe("Decimal value as string (precision 18, scale 4)"),
     currency: z.string().length(3).nullable(),
     vat: z.number().int().nullable(),
     stockQuantity: z.number().int(),
@@ -190,7 +192,9 @@ export const ProductWithBarcodesSchema = z
     diaKey: z.number().int(),
     stockCode: z.string(),
     name: z.string(),
-    price: z.string().describe("Decimal value as string (precision 18, scale 4)"),
+    price: z
+      .string()
+      .describe("Decimal value as string (precision 18, scale 4)"),
     currency: z.string().length(3).nullable(),
     vat: z.number().int().nullable(),
     stockQuantity: z.number().int(),
@@ -285,9 +289,8 @@ export const FirmFormBodySchema = z
   })
   .openapi("FirmFormBody");
 
-export const UpdateFirmBodySchema = FirmFormBodySchema.partial().openapi(
-  "UpdateFirmBody",
-);
+export const UpdateFirmBodySchema =
+  FirmFormBodySchema.partial().openapi("UpdateFirmBody");
 
 export const JobBodySchema = z
   .object({
@@ -347,16 +350,24 @@ export const ProductsQuerySchema = z.object({
 
 // ─── Path Params ──────────────────────────────────────────────────────────────
 
+const barcode = z.string().min(1).max(48).openapi({
+  description: "Product barcode (max 48 chars)",
+  example: "8690000000001",
+});
+
 export const ServerCodeAndBarcodeParamsSchema = z.object({
   serverCode: z
     .string()
     .min(1)
     .openapi({ description: "The firm's DIA server code", example: "SRV001" }),
-  barcode: z
+  barcode,
+});
+
+export const FirmCodeAndBarcodeParamsSchema = z.object({
+  firmCode: z
     .string()
     .min(1)
-    .max(48)
-    .openapi({ description: "Product barcode (max 48 chars)", example: "8690000000001" }),
+    .openapi({ description: "The firm code", example: "00555" }),
 });
 
 export const FirmIdParamSchema = z.object({

@@ -11,6 +11,7 @@
     "start": "node dist/index.js",
     "db:generate": "NODE_OPTIONS='--import tsx' drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:seed": "tsx src/db/seeder.ts",
     "db:export": "NODE_OPTIONS='--import tsx' drizzle-kit export"
   },
   "dependencies": {

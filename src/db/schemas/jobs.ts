@@ -16,7 +16,9 @@ export const jobsTable = pgTable("jobs", {
     .unique()
     .notNull(),
   frequency: integer().notNull(),
+
   unit: jobFrequencyUnitEnum().notNull(),
+
   lastRanAt: timestamp("last_ran_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()

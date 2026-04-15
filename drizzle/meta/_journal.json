@@ -71,6 +71,34 @@
       "when": 1775049605307,
       "tag": "0009_pale_johnny_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1775730102562,
+      "tag": "0010_thick_squadron_supreme",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1775811770283,
+      "tag": "0011_grey_tag",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1775823401963,
+      "tag": "0012_skinny_micromacro",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1775824394952,
+      "tag": "0013_silky_maelstrom",
+      "breakpoints": true
     }
   ]
 }
