@@ -64,3 +64,14 @@ export const jobValidation = z.object({
   frequency: z.number().int().positive(),
   unit: z.enum(["minute", "hour", "day", "month"]),
 });
+
+export const stockRowSchema = z.object({
+  stockCode: z.string().min(1, { error: "Stok Kart Kodu boş olamaz" }),
+  name: z.string().min(1, { error: "Ürün adı boş olamaz" }),
+  price: z.string().default("0"),
+  currency: z.string().default("TRY"),
+  vat: z.coerce.number().default(0),
+  minQuantity: z.coerce.number().default(1),
+  unit: z.string().default("AD"),
+  barcodes: z.string().array().max(5),
+});

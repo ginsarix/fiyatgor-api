@@ -27,6 +27,7 @@ import {
   getProducts,
   getProductsCount,
   loadProducts,
+  saveRawProducts,
 } from "../services/product.js";
 import { aesEncrypt } from "../utils/aes-256-gcm.js";
 import { toCronExpression } from "../utils/cron.js";
@@ -35,6 +36,7 @@ import { hash } from "../utils/sha256.js";
 import {
   firmFormValidation,
   jobValidation,
+  stockRowSchema,
   userFormValidation,
 } from "../validations/zod.js";
 
@@ -62,6 +64,27 @@ export function registerAdminRoutes(app: Hono) {
 
     return c.json({ message: "Ürünler eşleştirildi", newRowCounts }, 200);
   });
+
+  app.post(
+    "/admin/products/raw",
+    adminAuth,
+    firmAuth,
+    zValidator(
+      "json",
+      z.object({
+        products: z.array(stockRowSchema),
+        deleteStale: z.boolean().default(false),
+      }),
+    ),
+    async (c) => {
+      const { id: firmId } = c.get("firm");
+      const { products, deleteStale } = c.req.valid("json");
+
+      const rowCounts = await saveRawProducts(db, firmId, products, deleteStale);
+
+      return c.json({ message: "Ürünler başarıyla kaydedildi", rowCounts }, 200);
+    },
+  );
 
   app.post(
     "/admin/jobs",

@@ -7,7 +7,7 @@ export const barcodesTable = pgTable("barcodes", {
   productId: integer("product_id")
     .references(() => productsTable.id, { onDelete: "cascade" })
     .notNull(),
-  diaKey: integer("dia_key").notNull(),
+  diaKey: integer("dia_key"),
   barcode: text().unique().notNull(),
 });
 

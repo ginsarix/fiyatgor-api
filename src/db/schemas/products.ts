@@ -24,14 +24,14 @@ export const productsTable = pgTable(
     firmId: integer("firm_id")
       .references(() => firmsTable.id, { onDelete: "cascade" })
       .notNull(),
-    diaKey: integer("dia_key").unique().notNull(),
+    diaKey: integer("dia_key").unique(),
     stockCode: text("stock_code").notNull(),
     name: text().notNull(),
     price: decimal({ precision: 18, scale: 4 }).notNull(),
     currency: char({ length: 3 }),
     vat: integer(),
     stockQuantity: integer("stock_quantity").default(0).notNull(),
-    status: productStatusEnum().notNull(),
+    status: productStatusEnum().default("active").notNull(),
     minQuantity: integer("min_quantity").default(1).notNull(),
     unit: text().default("AD").notNull(),
     image: text(),

@@ -35,7 +35,9 @@ function extractBarcodesWithRelation(
 ) {
   // lookup map (diaKey -> productId)
   const productMap = new Map<number, number>(
-    savedProducts.map((p) => [p.diaKey, p.id]),
+    savedProducts
+      .filter((p): p is SelectableProduct & { diaKey: number } => p.diaKey !== null)
+      .map((p) => [p.diaKey, p.id]),
   );
 
   const results: InsertableBarcode[] = [];
@@ -410,6 +412,186 @@ export async function loadProducts(
       : fetchedProducts.result;
 
   return await saveProducts(db, finalProducts, finalFirmId, finalPriceField);
+}
+
+export type RawProductInput = {
+  stockCode: string;
+  name: string;
+  price: string;
+  currency?: string | null;
+  vat?: number | null;
+  status?: "active" | "passive";
+  minQuantity?: number;
+  unit?: string;
+  image?: string | null;
+  barcodes?: string[];
+};
+
+type ProductIdAndStockCode = Pick<SelectableProduct, "id" | "stockCode">;
+
+function extractRawBarcodesWithRelation(
+  rawProducts: RawProductInput[],
+  savedProducts: ProductIdAndStockCode[],
+) {
+  // lookup map (stockCode -> productId)
+  const productMap = new Map<string, number>(
+    savedProducts.map((p) => [p.stockCode, p.id]),
+  );
+
+  const results: InsertableBarcode[] = [];
+
+  for (const raw of rawProducts) {
+    if (!raw.barcodes?.length) continue;
+
+    const productId = productMap.get(raw.stockCode);
+    if (!productId) continue;
+
+    for (const barcode of raw.barcodes) {
+      if (!barcode) continue;
+      results.push({
+        productId,
+        barcode,
+      });
+    }
+  }
+
+  return results;
+}
+
+export async function saveRawProducts(
+  db: DB,
+  firmId: number,
+  rawProducts: RawProductInput[],
+  deleteStale = false,
+) {
+  const products: InsertableProduct[] = rawProducts.map((r) => ({
+    firmId,
+    stockCode: r.stockCode,
+    name: r.name,
+    price: r.price,
+    currency: r.currency,
+    vat: r.vat ?? undefined,
+    status: r.status ?? "active",
+    minQuantity: r.minQuantity ?? 1,
+    unit: r.unit ?? "AD",
+    image: r.image,
+  }));
+
+  const chunkSize = 300;
+
+  let insertedProductRowsCount = 0;
+  let updatedProductRowsCount = 0;
+  let insertedBarcodeRowsCount = 0;
+  let updatedBarcodeRowsCount = 0;
+  let deletedProductRowsCount = 0;
+
+  for (let i = 0; i < products.length; i += chunkSize) {
+    const chunk = products.slice(i, i + chunkSize);
+    const rawChunk = rawProducts.slice(i, i + chunkSize);
+
+    await db.transaction(async (tx) => {
+      const upsertedProducts = await tx
+        .insert(productsTable)
+        .values(chunk)
+        .onConflictDoUpdate({
+          target: [productsTable.firmId, productsTable.stockCode],
+          set: {
+            name: sql`excluded.name`,
+            price: sql`excluded.price`,
+            currency: sql`excluded.currency`,
+            vat: sql`excluded.vat`,
+            status: sql`excluded.status`,
+            minQuantity: sql`excluded.min_quantity`,
+            unit: sql`excluded.unit`,
+            image: sql`excluded.image`,
+            updatedAt: new Date(),
+          },
+          setWhere: sql`
+            products.name IS DISTINCT FROM excluded.name OR
+            products.price IS DISTINCT FROM excluded.price OR
+            products.currency IS DISTINCT FROM excluded.currency OR
+            products.vat IS DISTINCT FROM excluded.vat OR
+            products.status IS DISTINCT FROM excluded.status OR
+            products.min_quantity IS DISTINCT FROM excluded.min_quantity OR
+            products.unit IS DISTINCT FROM excluded.unit OR
+            products.image IS DISTINCT FROM excluded.image
+          `,
+        })
+        .returning({
+          id: productsTable.id,
+          stockCode: productsTable.stockCode,
+          inserted: sql<boolean>`xmax = 0`,
+        });
+
+      const insertedCount = upsertedProducts.filter((r) => r.inserted).length;
+      const updatedCount = upsertedProducts.length - insertedCount;
+
+      insertedProductRowsCount += insertedCount;
+      updatedProductRowsCount += updatedCount;
+
+      const barcodesWithRelation = extractRawBarcodesWithRelation(
+        rawChunk,
+        upsertedProducts,
+      );
+
+      if (barcodesWithRelation.length) {
+        const result = await tx
+          .insert(barcodesTable)
+          .values(barcodesWithRelation)
+          .onConflictDoUpdate({
+            target: barcodesTable.barcode,
+            set: {
+              barcode: sql`excluded.barcode`,
+            },
+            setWhere: sql`barcodes.barcode IS DISTINCT FROM excluded.barcode`,
+          })
+          .returning({
+            barcode: barcodesTable.barcode,
+            inserted: sql<boolean>`xmax = 0`,
+          });
+
+        const insertedBarcodes = result.filter((r) => r.inserted).length;
+        const updatedBarcodes = result.length - insertedBarcodes;
+
+        insertedBarcodeRowsCount += insertedBarcodes;
+        updatedBarcodeRowsCount += updatedBarcodes;
+      }
+    });
+  }
+
+  if (deleteStale) {
+    const inputStockCodes = rawProducts.map((r) => r.stockCode);
+
+    if (inputStockCodes.length > 0) {
+      const deleted = await db
+        .delete(productsTable)
+        .where(
+          and(
+            eq(productsTable.firmId, firmId),
+            notInArray(productsTable.stockCode, inputStockCodes),
+          ),
+        )
+        .returning({ id: productsTable.id });
+
+      deletedProductRowsCount = deleted.length;
+    } else {
+      // Nothing in input — remove all products for this firm
+      const deleted = await db
+        .delete(productsTable)
+        .where(eq(productsTable.firmId, firmId))
+        .returning({ id: productsTable.id });
+
+      deletedProductRowsCount = deleted.length;
+    }
+  }
+
+  return {
+    insertedProductRowsCount,
+    updatedProductRowsCount,
+    insertedBarcodeRowsCount,
+    updatedBarcodeRowsCount,
+    deletedProductRowsCount,
+  };
 }
 
 export const findProductByAnyBarcode = (
