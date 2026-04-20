@@ -172,20 +172,39 @@ export async function saveProducts(
           .onConflictDoUpdate({
             target: barcodesTable.barcode,
             set: {
-              barcode: sql`excluded.barcode`,
+              productId: sql`excluded.product_id`,
             },
-            setWhere: sql`barcodes.barcode IS DISTINCT FROM excluded.barcode`,
           })
           .returning({
             barcode: barcodesTable.barcode,
             inserted: sql<boolean>`xmax = 0`,
           });
 
+        await tx.delete(barcodesTable).where(
+          and(
+            inArray(
+              barcodesTable.productId,
+              upsertedProducts.map((p) => p.id),
+            ),
+            notInArray(
+              barcodesTable.barcode,
+              barcodesWithRelation.map((b) => b.barcode),
+            ),
+          ),
+        );
+
         const insertedCount = result.filter((r) => r.inserted).length;
         const updatedCount = result.length - insertedCount;
 
         insertedBarcodeRowsCount += insertedCount;
         updatedBarcodeRowsCount += updatedCount;
+      } else {
+        await tx.delete(barcodesTable).where(
+          inArray(
+            barcodesTable.productId,
+            upsertedProducts.map((p) => p.id),
+          ),
+        );
       }
     });
   }
@@ -543,20 +562,39 @@ export async function saveRawProducts(
           .onConflictDoUpdate({
             target: barcodesTable.barcode,
             set: {
-              barcode: sql`excluded.barcode`,
+              productId: sql`excluded.product_id`, // update ownership if barcode moved to different product
             },
-            setWhere: sql`barcodes.barcode IS DISTINCT FROM excluded.barcode`,
           })
           .returning({
             barcode: barcodesTable.barcode,
             inserted: sql<boolean>`xmax = 0`,
           });
 
+        await tx.delete(barcodesTable).where(
+          and(
+            inArray(
+              barcodesTable.productId,
+              upsertedProducts.map((p) => p.id),
+            ),
+            notInArray(
+              barcodesTable.barcode,
+              barcodesWithRelation.map((b) => b.barcode),
+            ),
+          ),
+        );
+
         const insertedBarcodes = result.filter((r) => r.inserted).length;
         const updatedBarcodes = result.length - insertedBarcodes;
 
         insertedBarcodeRowsCount += insertedBarcodes;
         updatedBarcodeRowsCount += updatedBarcodes;
+      } else {
+        await tx.delete(barcodesTable).where(
+          inArray(
+            barcodesTable.productId,
+            upsertedProducts.map((p) => p.id),
+          ),
+        );
       }
     });
   }

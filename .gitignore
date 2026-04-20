@@ -34,3 +34,6 @@ dist
 full_schema.sql
 
 uploads
+
+# Sentry Config File
+.env.sentry-build-plugin
