@@ -1,5 +1,7 @@
 import { createRoute } from '@hono/zod-openapi';
 import {
+	CatalogBodySchema,
+	CatalogUploadResponseSchema,
 	CreatedJobResponseSchema,
 	FirmResponseSchema,
 	JobBodySchema,
@@ -7,7 +9,8 @@ import {
 	MessageSchema,
 	ProductsQuerySchema,
 	ProductsResponseSchema,
-	ServerCodeQuerySchema,
+	RawProductsBodySchema,
+	RawSaveResponseSchema,
 	SyncResponseSchema,
 	UpdatedFirmResponseSchema,
 	UpdatedJobResponseSchema,
@@ -22,13 +25,10 @@ export const syncProductsRoute = createRoute({
 	method: 'post',
 	path: '/admin/products/sync',
 	tags: ['Admin – Products'],
-	summary: 'Sync products',
+	summary: 'Sync products from DIA',
 	description:
-		'Triggers a full product synchronisation from the DIA ERP for the authenticated firm. Requires an active admin session and a valid `serverCode` query parameter.',
+		'Triggers a full product synchronisation from the DIA ERP for the authenticated firm. Requires the firm to have DIA connection details configured.',
 	security: adminSecurity,
-	request: {
-		query: ServerCodeQuerySchema,
-	},
 	responses: {
 		200: {
 			content: { 'application/json': { schema: SyncResponseSchema } },
@@ -36,7 +36,7 @@ export const syncProductsRoute = createRoute({
 		},
 		400: {
 			content: { 'application/json': { schema: MessageSchema } },
-			description: 'Missing serverCode query parameter',
+			description: 'Firm has no DIA connection details configured',
 		},
 		401: {
 			content: { 'application/json': { schema: MessageSchema } },
@@ -46,9 +46,44 @@ export const syncProductsRoute = createRoute({
 			content: { 'application/json': { schema: MessageSchema } },
 			description: 'Firm access denied',
 		},
-		404: {
+	},
+});
+
+export const saveRawProductsRoute = createRoute({
+	method: 'post',
+	path: '/admin/products/raw',
+	tags: ['Admin – Products'],
+	summary: 'Save raw products',
+	description:
+		'Manually upserts products for the authenticated firm from a provided list. Optionally deletes stale products not present in the list.',
+	security: adminSecurity,
+	request: {
+		body: {
+			content: {
+				'application/json': {
+					schema: RawProductsBodySchema,
+				},
+			},
+			required: true,
+			description: 'Products to save and optional stale deletion flag',
+		},
+	},
+	responses: {
+		200: {
+			content: { 'application/json': { schema: RawSaveResponseSchema } },
+			description: 'Products saved successfully',
+		},
+		401: {
 			content: { 'application/json': { schema: MessageSchema } },
-			description: 'Firm not found',
+			description: 'Not authenticated',
+		},
+		403: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Firm access denied',
+		},
+		422: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Validation error',
 		},
 	},
 });
@@ -59,10 +94,9 @@ export const upsertJobRoute = createRoute({
 	tags: ['Admin – Jobs'],
 	summary: 'Create or update sync job',
 	description:
-		'Creates a new background sync job for the firm if none exists, or updates the existing one. The job runs product synchronisation on the specified cron schedule.',
+		'Creates a new background sync job for the firm if none exists, or updates the existing one. Requires the firm to have DIA connection details configured.',
 	security: adminSecurity,
 	request: {
-		query: ServerCodeQuerySchema,
 		body: {
 			content: {
 				'application/json': {
@@ -84,7 +118,7 @@ export const upsertJobRoute = createRoute({
 		},
 		400: {
 			content: { 'application/json': { schema: MessageSchema } },
-			description: 'Missing serverCode query parameter',
+			description: 'Firm has no DIA connection details configured',
 		},
 		401: {
 			content: { 'application/json': { schema: MessageSchema } },
@@ -93,10 +127,6 @@ export const upsertJobRoute = createRoute({
 		403: {
 			content: { 'application/json': { schema: MessageSchema } },
 			description: 'Firm access denied',
-		},
-		404: {
-			content: { 'application/json': { schema: MessageSchema } },
-			description: 'Firm not found',
 		},
 		422: {
 			content: { 'application/json': { schema: MessageSchema } },
@@ -110,20 +140,12 @@ export const getJobRoute = createRoute({
 	path: '/admin/jobs',
 	tags: ['Admin – Jobs'],
 	summary: 'Get sync job',
-	description:
-		'Returns the background sync job configured for the authenticated firm.',
+	description: 'Returns the background sync job configured for the authenticated firm.',
 	security: adminSecurity,
-	request: {
-		query: ServerCodeQuerySchema,
-	},
 	responses: {
 		200: {
 			content: { 'application/json': { schema: JobResponseSchema } },
 			description: 'Job retrieved successfully',
-		},
-		400: {
-			content: { 'application/json': { schema: MessageSchema } },
-			description: 'Missing serverCode query parameter',
 		},
 		401: {
 			content: { 'application/json': { schema: MessageSchema } },
@@ -145,20 +167,12 @@ export const deleteJobRoute = createRoute({
 	path: '/admin/jobs',
 	tags: ['Admin – Jobs'],
 	summary: 'Delete sync job',
-	description:
-		'Deletes the background sync job for the authenticated firm and cancels its scheduler.',
+	description: 'Deletes the background sync job for the authenticated firm and cancels its scheduler.',
 	security: adminSecurity,
-	request: {
-		query: ServerCodeQuerySchema,
-	},
 	responses: {
 		200: {
 			content: { 'application/json': { schema: MessageSchema } },
 			description: 'Job deleted successfully',
-		},
-		400: {
-			content: { 'application/json': { schema: MessageSchema } },
-			description: 'Missing serverCode query parameter',
 		},
 		401: {
 			content: { 'application/json': { schema: MessageSchema } },
@@ -167,10 +181,6 @@ export const deleteJobRoute = createRoute({
 		403: {
 			content: { 'application/json': { schema: MessageSchema } },
 			description: 'Firm access denied',
-		},
-		404: {
-			content: { 'application/json': { schema: MessageSchema } },
-			description: 'Firm not found',
 		},
 	},
 });
@@ -180,8 +190,7 @@ export const getAdminProductsRoute = createRoute({
 	path: '/admin/products',
 	tags: ['Admin – Products'],
 	summary: 'List products',
-	description:
-		'Returns a paginated list of products for the authenticated firm. Supports search and sorting.',
+	description: 'Returns a paginated list of products for the authenticated firm. Supports search and sorting.',
 	security: adminSecurity,
 	request: {
 		query: ProductsQuerySchema,
@@ -191,10 +200,6 @@ export const getAdminProductsRoute = createRoute({
 			content: { 'application/json': { schema: ProductsResponseSchema } },
 			description: 'Products retrieved successfully',
 		},
-		400: {
-			content: { 'application/json': { schema: MessageSchema } },
-			description: 'Missing serverCode query parameter',
-		},
 		401: {
 			content: { 'application/json': { schema: MessageSchema } },
 			description: 'Not authenticated',
@@ -202,10 +207,6 @@ export const getAdminProductsRoute = createRoute({
 		403: {
 			content: { 'application/json': { schema: MessageSchema } },
 			description: 'Firm access denied',
-		},
-		404: {
-			content: { 'application/json': { schema: MessageSchema } },
-			description: 'Firm not found',
 		},
 		422: {
 			content: { 'application/json': { schema: MessageSchema } },
@@ -222,17 +223,10 @@ export const getAdminFirmRoute = createRoute({
 	description:
 		'Returns the firm associated with the authenticated user. Sensitive fields such as `diaPassword` are omitted.',
 	security: adminSecurity,
-	request: {
-		query: ServerCodeQuerySchema,
-	},
 	responses: {
 		200: {
 			content: { 'application/json': { schema: FirmResponseSchema } },
 			description: 'Firm retrieved successfully',
-		},
-		400: {
-			content: { 'application/json': { schema: MessageSchema } },
-			description: 'Missing serverCode query parameter',
 		},
 		401: {
 			content: { 'application/json': { schema: MessageSchema } },
@@ -242,10 +236,6 @@ export const getAdminFirmRoute = createRoute({
 			content: { 'application/json': { schema: MessageSchema } },
 			description: 'Firm access denied',
 		},
-		404: {
-			content: { 'application/json': { schema: MessageSchema } },
-			description: 'Firm not found',
-		},
 	},
 });
 
@@ -254,11 +244,9 @@ export const updateAdminFirmRoute = createRoute({
 	path: '/admin/firm',
 	tags: ['Admin – Firm'],
 	summary: 'Update firm',
-	description:
-		"Partially updates the authenticated firm's details. All fields are optional.",
+	description: "Partially updates the authenticated firm's details. All fields are optional.",
 	security: adminSecurity,
 	request: {
-		query: ServerCodeQuerySchema,
 		body: {
 			content: {
 				'application/json': {
@@ -274,9 +262,57 @@ export const updateAdminFirmRoute = createRoute({
 			content: { 'application/json': { schema: UpdatedFirmResponseSchema } },
 			description: 'Firm updated successfully',
 		},
+		401: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Not authenticated',
+		},
+		403: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Firm access denied',
+		},
+		409: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Conflict (duplicate firm code or server code)',
+		},
+		422: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Validation error',
+		},
+	},
+});
+
+export const uploadCatalogRoute = createRoute({
+	method: 'post',
+	path: '/admin/catalog',
+	tags: ['Admin – Firm'],
+	summary: 'Upload catalog image',
+	description:
+		'Uploads a catalog image for the authenticated firm (max 50 MiB). Replaces any existing catalog.',
+	security: adminSecurity,
+	request: {
+		body: {
+			content: {
+				'multipart/form-data': {
+					schema: CatalogBodySchema,
+				},
+			},
+			required: true,
+		},
+	},
+	responses: {
+		201: {
+			content: { 'application/json': { schema: CatalogUploadResponseSchema } },
+			description: 'Catalog image uploaded successfully',
+			headers: {
+				Location: {
+					description: 'URL of the catalog',
+					schema: { type: 'string' },
+				},
+			},
+		},
 		400: {
 			content: { 'application/json': { schema: MessageSchema } },
-			description: 'Missing serverCode query parameter',
+			description: 'No file provided',
 		},
 		401: {
 			content: { 'application/json': { schema: MessageSchema } },
@@ -286,13 +322,9 @@ export const updateAdminFirmRoute = createRoute({
 			content: { 'application/json': { schema: MessageSchema } },
 			description: 'Firm access denied',
 		},
-		404: {
+		415: {
 			content: { 'application/json': { schema: MessageSchema } },
-			description: 'Firm not found',
-		},
-		422: {
-			content: { 'application/json': { schema: MessageSchema } },
-			description: 'Validation error',
+			description: 'Unsupported media type (only images accepted)',
 		},
 	},
 });
@@ -302,8 +334,7 @@ export const getMeRoute = createRoute({
 	path: '/admin/me',
 	tags: ['Admin – User'],
 	summary: 'Get current user',
-	description:
-		"Returns the authenticated user's profile. The `password` field is omitted.",
+	description: "Returns the authenticated user's profile. The `password` field is omitted.",
 	security: adminSecurity,
 	responses: {
 		200: {

@@ -2,6 +2,7 @@ import { relations } from "drizzle-orm";
 import {
   char,
   decimal,
+  index,
   integer,
   pgEnum,
   pgTable,
@@ -42,7 +43,13 @@ export const productsTable = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (t) => [unique("firm_stock_code_unique").on(t.firmId, t.stockCode)],
+  (t) => [
+    unique("firm_stock_code_unique").on(t.firmId, t.stockCode),
+    index("products_firm_stock_code_idx").on(t.firmId, t.stockCode),
+    index("products_firm_name_idx").on(t.firmId, t.name),
+    index("products_firm_price_idx").on(t.firmId, t.price),
+    index("products_firm_created_at_idx").on(t.firmId, t.createdAt),
+  ],
 );
 
 export const firmsRelations = relations(firmsTable, ({ many }) => ({

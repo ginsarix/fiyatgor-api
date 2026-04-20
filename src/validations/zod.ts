@@ -16,11 +16,11 @@ export const authFormValidation = z.object({
 export const firmFormValidation = z.object({
   firmCode: z.string().min(1),
   name: z.string().min(1),
-  diaServerCode: z.string().min(1),
-  diaUsername: z.string().min(1),
-  diaPassword: z.string().min(1),
+  diaServerCode: z.string().nullish(),
+  diaUsername: z.string().nullish(),
+  diaPassword: z.string().nullish(),
   diaApiKey: z.string().nullish(),
-  diaFirmCode: z.number().int().positive(),
+  diaFirmCode: z.number().int().positive().nullish(),
   diaPeriodCode: z.number().int().nonnegative().nullish(),
 
   priceField: z

@@ -59,6 +59,11 @@ async function login(
     .from(firmsTable)
     .where(eq(firmsTable.diaServerCode, serverCode));
 
+  if (!username || !password || apiKey === null)
+    throw new Error(
+      "Tried logging into DIA with a firm that has no DIA credentials",
+    );
+
   const loginRequest: DiaLoginRequest = {
     login: {
       username,

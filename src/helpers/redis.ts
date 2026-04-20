@@ -27,7 +27,7 @@ export async function getDiaSession(firmId: number) {
  */
 export async function setSession(
   userId: number,
-  serverCode: string,
+  firmCode: string,
   role: "admin" | "superadmin",
   name: string,
 ): Promise<UUID> {
@@ -45,7 +45,7 @@ export async function setSession(
   }
 
   multi
-    .hSet(sessionHashKey, { name, serverCode, role, userId })
+    .hSet(sessionHashKey, { name, firmCode, role, userId })
     .expire(sessionHashKey, sessionExpiration)
     .set(userSessionRedisKey, sessionId, {
       expiration: { type: "EX", value: sessionExpiration },

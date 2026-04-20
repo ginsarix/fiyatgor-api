@@ -56,17 +56,17 @@ export const firmAuth = createMiddleware<
   }
 >(async (c, next) => {
   const user = c.get("user");
-  const requestedFirmServerCode = c.req.query("serverCode");
+  const requestedFirmCode = c.req.query("firmCode");
 
-  if (!requestedFirmServerCode)
-    return c.json({ message: "Sunucu kodu boş olamaz" }, 400);
+  if (!requestedFirmCode)
+    return c.json({ message: "Firma kodu boş olamaz" }, 400);
 
   const [firm] = await db
     .select()
     .from(firmsTable)
-    .where(eq(firmsTable.diaServerCode, requestedFirmServerCode));
+    .where(eq(firmsTable.firmCode, requestedFirmCode));
   if (!firm)
-    return c.json({ message: "Bu sunucu kodu ile bir firma bulunamadı" }, 404);
+    return c.json({ message: "Bu firma kodu ile bir firma bulunamadı" }, 404);
 
   if (firm.id !== user.firmId)
     return c.json({ message: "Bu firmaya erişim yetkiniz yok" }, 403);

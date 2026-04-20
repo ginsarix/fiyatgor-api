@@ -5,9 +5,10 @@ import {
 	CreateFirmBodySchema,
 	CreateUserBodySchema,
 	FirmIdParamSchema,
-	FirmResponseSchema,
 	FirmsResponseSchema,
 	MessageSchema,
+	UpdatedFirmResponseSchema,
+	UpdateFirmBodySchema,
 	UsersResponseSchema,
 } from '../schemas.js';
 
@@ -67,8 +68,7 @@ export const listUsersRoute = createRoute({
 	path: '/superadmin/users',
 	tags: ['Super Admin – Users'],
 	summary: 'List all users',
-	description:
-		'Returns all registered users across all firms. Password fields are omitted from every record.',
+	description: 'Returns all registered users across all firms. Password fields are omitted from every record.',
 	security: superAdminSecurity,
 	responses: {
 		200: {
@@ -112,7 +112,7 @@ export const listFirmsRoute = createRoute({
 
 export const getFirmByIdRoute = createRoute({
 	method: 'get',
-	path: '/superadmin/firm/{id}',
+	path: '/superadmin/firms/{id}',
 	tags: ['Super Admin – Firms'],
 	summary: 'Get firm by ID',
 	description: 'Returns a single firm by its numeric ID.',
@@ -122,7 +122,7 @@ export const getFirmByIdRoute = createRoute({
 	},
 	responses: {
 		200: {
-			content: { 'application/json': { schema: FirmResponseSchema } },
+			content: { 'application/json': { schema: MessageSchema } },
 			description: 'Firm retrieved successfully',
 		},
 		404: {
@@ -178,9 +178,86 @@ export const createFirmRoute = createRoute({
 			content: { 'application/json': { schema: MessageSchema } },
 			description: 'Insufficient privileges (superadmin required)',
 		},
+		409: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Conflict (duplicate firm code or server code)',
+		},
 		422: {
 			content: { 'application/json': { schema: MessageSchema } },
 			description: 'Validation error',
+		},
+	},
+});
+
+export const updateFirmByIdRoute = createRoute({
+	method: 'patch',
+	path: '/superadmin/firms/{id}',
+	tags: ['Super Admin – Firms'],
+	summary: 'Update firm',
+	description: "Partially updates a firm's details by its numeric ID. The `diaPassword` is AES-256-GCM encrypted before storage.",
+	security: superAdminSecurity,
+	request: {
+		params: FirmIdParamSchema,
+		body: {
+			content: {
+				'application/json': {
+					schema: UpdateFirmBodySchema,
+				},
+			},
+			required: true,
+			description: 'Fields to update on the firm',
+		},
+	},
+	responses: {
+		200: {
+			content: { 'application/json': { schema: UpdatedFirmResponseSchema } },
+			description: 'Firm updated successfully',
+		},
+		404: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Firm not found',
+		},
+		401: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Not authenticated',
+		},
+		403: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Insufficient privileges (superadmin required)',
+		},
+		422: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Validation error',
+		},
+	},
+});
+
+export const deleteFirmByIdRoute = createRoute({
+	method: 'delete',
+	path: '/superadmin/firms/{id}',
+	tags: ['Super Admin – Firms'],
+	summary: 'Delete firm',
+	description: 'Permanently deletes a firm by its numeric ID.',
+	security: superAdminSecurity,
+	request: {
+		params: FirmIdParamSchema,
+	},
+	responses: {
+		200: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Firm deleted successfully',
+		},
+		404: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Firm not found',
+		},
+		401: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Not authenticated',
+		},
+		403: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Insufficient privileges (superadmin required)',
 		},
 	},
 });

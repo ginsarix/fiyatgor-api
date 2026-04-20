@@ -163,7 +163,20 @@ export function registerSuperAdminRoutes(app: Hono) {
     "/superadmin/firms",
     zValidator(
       "json",
-      z.object({ firm: firmFormValidation, job: jobValidation.nullish() }),
+      z
+        .object({ firm: firmFormValidation, job: jobValidation.nullish() })
+        .superRefine((data, ctx) => {
+          if (
+            data.job &&
+            (!data.firm.diaServerCode || !data.firm.diaFirmCode)
+          ) {
+            ctx.addIssue({
+              code: "custom",
+              message: "DIA bağlantı bilgileri olmadan komut eklenemez",
+              path: ["firm"],
+            });
+          }
+        }),
     ),
     async (c) => {
       const input = c.req.valid("json");
@@ -175,8 +188,10 @@ export function registerSuperAdminRoutes(app: Hono) {
           .insert(firmsTable)
           .values({
             ...input.firm,
-            diaApiKey: input.firm.diaApiKey ?? "",
-            diaPassword: aesEncrypt(input.firm.diaPassword),
+            diaApiKey: input.firm.diaApiKey,
+            diaPassword: input.firm.diaPassword
+              ? aesEncrypt(input.firm.diaPassword)
+              : null,
           })
           .returning();
       } catch (error) {
@@ -211,8 +226,10 @@ export function registerSuperAdminRoutes(app: Hono) {
           () =>
             runProductSyncJob(
               db,
-              createdFirm.diaServerCode,
-              createdFirm.diaFirmCode,
+              // biome-ignore  lint/style/noNonNullAssertion: already validated at middleware
+              createdFirm.diaServerCode!,
+              // biome-ignore  lint/style/noNonNullAssertion: already validated at middleware
+              createdFirm.diaFirmCode!,
               createdJob.id,
               {
                 firmId: createdFirm.id,

@@ -38,7 +38,7 @@ export async function registerAuthRoutes(app: Hono) {
         return c.json({ message: "E-posta veya parola yanlış" }, 401);
 
       const [firm] = await db
-        .select({ serverCode: firmsTable.diaServerCode })
+        .select({ firmCode: firmsTable.firmCode })
         .from(firmsTable)
         .where(eq(firmsTable.id, user.firmId));
       if (!firm) {
@@ -47,7 +47,7 @@ export async function registerAuthRoutes(app: Hono) {
 
       const sessionId = await setSession(
         user.id,
-        firm.serverCode,
+        firm.firmCode,
         user.role,
         user.name,
       );

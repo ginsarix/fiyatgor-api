@@ -44,11 +44,21 @@ export function registerAdminRoutes(app: Hono) {
   app.post("/admin/products/sync", adminAuth, firmAuth, async (c) => {
     const firm = c.get("firm");
 
+    const serverCode = firm.diaServerCode;
+    const diaFirmCode = firm.diaFirmCode;
+
+    if (!serverCode || !diaFirmCode) {
+      return c.json(
+        { message: "DIA bağlantı bilgisi olmadan ürün eşleştiremezsiniz" },
+        400,
+      );
+    }
+
     const newRowCounts = await loadProducts(
       db,
-      firm.diaServerCode,
+      serverCode,
       {
-        scf_stokkart_detay_listele: { firma_kodu: firm.diaFirmCode },
+        scf_stokkart_detay_listele: { firma_kodu: diaFirmCode },
       },
       {
         firmId: firm.id,
@@ -80,9 +90,17 @@ export function registerAdminRoutes(app: Hono) {
       const { id: firmId } = c.get("firm");
       const { products, deleteStale } = c.req.valid("json");
 
-      const rowCounts = await saveRawProducts(db, firmId, products, deleteStale);
+      const rowCounts = await saveRawProducts(
+        db,
+        firmId,
+        products,
+        deleteStale,
+      );
 
-      return c.json({ message: "Ürünler başarıyla kaydedildi", rowCounts }, 200);
+      return c.json(
+        { message: "Ürünler başarıyla kaydedildi", rowCounts },
+        200,
+      );
     },
   );
 
@@ -93,6 +111,16 @@ export function registerAdminRoutes(app: Hono) {
     zValidator("json", jobValidation),
     async (c) => {
       const firm = c.get("firm");
+
+      const serverCode = firm.diaServerCode;
+      const diaFirmCode = firm.diaFirmCode;
+
+      if (!serverCode || !diaFirmCode) {
+        return c.json(
+          { message: "DIA bağlantı bilgisi olmadan ürün eşleştiremezsiniz" },
+          400,
+        );
+      }
 
       const job = c.req.valid("json");
 
@@ -111,17 +139,11 @@ export function registerAdminRoutes(app: Hono) {
           insertedJob.id,
           toCronExpression(job.frequency, job.unit),
           () =>
-            runProductSyncJob(
-              db,
-              firm.diaServerCode,
-              firm.diaFirmCode,
-              insertedJob.id,
-              {
-                firmId: firm.id,
-                priceField: firm.priceField,
-                maxProductNameCharacters: firm.maxProductNameCharacters,
-              },
-            ).catch((err) => console.error("Job failed: ", err)),
+            runProductSyncJob(db, serverCode, diaFirmCode, insertedJob.id, {
+              firmId: firm.id,
+              priceField: firm.priceField,
+              maxProductNameCharacters: firm.maxProductNameCharacters,
+            }).catch((err) => console.error("Job failed: ", err)),
         );
 
         return c.json(
@@ -138,17 +160,11 @@ export function registerAdminRoutes(app: Hono) {
 
       deleteJob(updatedJob.id);
       createJob(updatedJob.id, toCronExpression(job.frequency, job.unit), () =>
-        runProductSyncJob(
-          db,
-          firm.diaServerCode,
-          firm.diaFirmCode,
-          updatedJob.id,
-          {
-            firmId: firm.id,
-            priceField: firm.priceField,
-            maxProductNameCharacters: firm.maxProductNameCharacters,
-          },
-        ).catch((err) => console.error("Job failed: ", err)),
+        runProductSyncJob(db, serverCode, diaFirmCode, updatedJob.id, {
+          firmId: firm.id,
+          priceField: firm.priceField,
+          maxProductNameCharacters: firm.maxProductNameCharacters,
+        }).catch((err) => console.error("Job failed: ", err)),
       );
 
       return c.json(
@@ -208,7 +224,8 @@ export function registerAdminRoutes(app: Hono) {
       }),
     ),
     async (c) => {
-      const { diaServerCode: serverCode } = c.get("firm");
+      const { firmCode } = c.get("firm");
+
       const { page, limit, search, sortBy, sortOrder } = c.req.valid("query");
 
       const options: GetProductsOptions = {
@@ -219,12 +236,12 @@ export function registerAdminRoutes(app: Hono) {
         sortOrder: sortOrder as SortOrder,
       };
 
-      const products = await getProducts(db, serverCode, options);
+      const products = await getProducts(db, firmCode, options);
 
       return c.json(
         {
           products,
-          rowCount: await getProductsCount(db, serverCode, search),
+          rowCount: await getProductsCount(db, firmCode, search),
           message: "Ürünler başarıyla getirildi",
         },
         200,

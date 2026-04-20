@@ -15,16 +15,19 @@ import { registerRoutes } from "./routes/index.js";
 import { loadJobsFromDB } from "./services/jobs/job-fns.js";
 
 const app = new Hono().onError((err, c) => {
-  console.error(err);
-
-  // Report _all_ unhandled errors.
-  Sentry.captureException(err);
   if (err instanceof HTTPException) {
-    return err.getResponse();
+    return err.getResponse(); // Don't report expected HTTP errors
   }
-  // Or just report errors which are not instances of HTTPException
-  // Sentry.captureException(err);
-  return c.json({ error: "Internal server error" }, 500);
+
+  console.error(err);
+  const eventId = Sentry.captureException(err, {
+    extra: {
+      method: c.req.method,
+      path: c.req.path,
+    },
+  }); // Only report true unknowns
+
+  return c.json({ error: "Internal server error", requestId: eventId }, 500);
 });
 
 app.use(logger());

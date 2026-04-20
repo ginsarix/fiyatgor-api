@@ -36,7 +36,9 @@ function extractBarcodesWithRelation(
   // lookup map (diaKey -> productId)
   const productMap = new Map<number, number>(
     savedProducts
-      .filter((p): p is SelectableProduct & { diaKey: number } => p.diaKey !== null)
+      .filter(
+        (p): p is SelectableProduct & { diaKey: number } => p.diaKey !== null,
+      )
       .map((p) => [p.diaKey, p.id]),
   );
 
@@ -248,7 +250,7 @@ export interface GetProductsOptions {
 
 export async function getProducts(
   db: DB,
-  serverCode: string,
+  firmCode: string,
   {
     page = 1,
     limit = 20,
@@ -259,11 +261,11 @@ export async function getProducts(
 ): Promise<
   { products: InsertableProduct; barcodes: InsertableBarcode | null }[] | null
 > {
-  // get the firm id using serverCode
+  // get the firm id using firmCode
   const [firm] = await db
     .select({ firmId: firmsTable.id })
     .from(firmsTable)
-    .where(eq(firmsTable.diaServerCode, serverCode));
+    .where(eq(firmsTable.firmCode, firmCode));
 
   if (!firm) return null;
 
@@ -317,14 +319,14 @@ export async function getProducts(
 
 export async function getProductsCount(
   db: DB,
-  serverCode: string,
+  firmCode: string,
   search?: string,
 ): Promise<number | null> {
-  // get the firm id using serverCode
+  // get the firm id using firmCode
   const [firm] = await db
     .select({ firmId: firmsTable.id })
     .from(firmsTable)
-    .where(eq(firmsTable.diaServerCode, serverCode));
+    .where(eq(firmsTable.firmCode, firmCode));
 
   if (!firm) return null;
 

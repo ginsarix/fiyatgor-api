@@ -35,8 +35,12 @@ export async function loadJobsFromDB(db: DB) {
     .innerJoin(firmsTable, eq(firmsTable.id, jobsTable.firmId));
 
   for (const { jobs, firms } of rows) {
+    const serverCode = firms.diaServerCode;
+    const diaFirmCode = firms.diaFirmCode;
+    if (!serverCode || !diaFirmCode) continue;
+
     createJob(jobs.id, toCronExpression(jobs.frequency, jobs.unit), () =>
-      runProductSyncJob(db, firms.diaServerCode, firms.diaFirmCode, jobs.id, {
+      runProductSyncJob(db, serverCode, diaFirmCode, jobs.id, {
         firmId: jobs.firmId,
         priceField: firms.priceField,
         maxProductNameCharacters: firms.maxProductNameCharacters,

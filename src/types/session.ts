@@ -1,6 +1,6 @@
 export type Session = {
   userId: number;
-  serverCode: string;
+  firmCode: string;
   name: string;
   role: "admin" | "superadmin";
 };

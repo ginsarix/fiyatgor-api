@@ -1,5 +1,6 @@
 import { createRoute } from "@hono/zod-openapi";
 import {
+  FirmCodeAndBarcodeParamsSchema,
   MessageSchema,
   ProductResponseSchema,
   ServerCodeAndBarcodeParamsSchema,
@@ -33,13 +34,13 @@ export const getProductByBarcodeRoute = createRoute({
 
 export const getProductByFirmCodeBarcodeRoute = createRoute({
   method: "get",
-  path: "/servers/{firmCode}/products/{barcode}",
+  path: "/firms/{firmCode}/products/{barcode}",
   tags: ["Public"],
-  summary: "Get product by barcode",
+  summary: "Get product by firm code and barcode",
   description:
-    "Looks up a product by any of its associated barcodes within a firm identified by its DIA server code. No authentication required.",
+    "Looks up a product by any of its associated barcodes within a firm identified by its user-friendly firm code. No authentication required.",
   request: {
-    params: ServerCodeAndBarcodeParamsSchema,
+    params: FirmCodeAndBarcodeParamsSchema,
   },
   responses: {
     200: {

@@ -11,7 +11,7 @@ export const MessageSchema = z
 export const SessionSchema = z
   .object({
     userId: z.number().int(),
-    serverCode: z.string(),
+    firmCode: z.string(),
     name: z.string(),
     role: z.enum(["admin", "superadmin"]),
   })
@@ -64,10 +64,10 @@ export const CreatedUserResponseSchema = z
 export const FirmSchema = z
   .object({
     id: z.number().int(),
+    firmCode: z.string(),
     name: z.string(),
-    diaServerCode: z.string(),
-    diaFirmCode: z.number().int(),
-    diaPeriodCode: z.number().int().nullable(),
+    diaServerCode: z.string().nullable(),
+    diaFirmCode: z.number().int().nullable(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime().nullable(),
   })
@@ -76,12 +76,18 @@ export const FirmSchema = z
 export const FirmFullSchema = z
   .object({
     id: z.number().int(),
+    firmCode: z.string(),
     name: z.string(),
-    diaServerCode: z.string(),
-    diaUsername: z.string(),
-    diaApiKey: z.string(),
-    diaFirmCode: z.number().int(),
+    diaServerCode: z.string().nullable(),
+    diaUsername: z.string().nullable(),
+    diaApiKey: z.string().nullable(),
+    diaFirmCode: z.number().int().nullable(),
     diaPeriodCode: z.number().int().nullable(),
+    priceField: z.enum([
+      "fiyat1", "fiyat2", "fiyat3", "fiyat4", "fiyat5",
+      "fiyat6", "fiyat7", "fiyat8", "fiyat9", "fiyat10",
+    ]),
+    maxProductNameCharacters: z.number().int().nullable(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime().nullable(),
   })
@@ -279,13 +285,21 @@ export const UpdateUserBodySchema = z
 
 export const FirmFormBodySchema = z
   .object({
+    firmCode: z.string().min(1),
     name: z.string().min(1),
-    diaServerCode: z.string().min(1),
-    diaUsername: z.string().min(1),
-    diaPassword: z.string().min(1),
-    diaApiKey: z.string().min(1),
-    diaFirmCode: z.number().int().positive(),
+    diaServerCode: z.string().nullish(),
+    diaUsername: z.string().nullish(),
+    diaPassword: z.string().nullish(),
+    diaApiKey: z.string().nullish(),
+    diaFirmCode: z.number().int().positive().nullish(),
     diaPeriodCode: z.number().int().nonnegative().nullish(),
+    priceField: z
+      .enum([
+        "fiyat1", "fiyat2", "fiyat3", "fiyat4", "fiyat5",
+        "fiyat6", "fiyat7", "fiyat8", "fiyat9", "fiyat10",
+      ])
+      .default("fiyat1"),
+    maxProductNameCharacters: z.number().int().positive().nullish(),
   })
   .openapi("FirmFormBody");
 
@@ -308,18 +322,7 @@ export const CreateFirmBodySchema = z
 
 // ─── Query Params ─────────────────────────────────────────────────────────────
 
-export const ServerCodeQuerySchema = z.object({
-  serverCode: z
-    .string()
-    .min(1)
-    .openapi({ description: "The firm's DIA server code", example: "SRV001" }),
-});
-
 export const ProductsQuerySchema = z.object({
-  serverCode: z
-    .string()
-    .min(1)
-    .openapi({ description: "The firm's DIA server code", example: "SRV001" }),
   page: z.coerce
     .number()
     .int()
@@ -340,11 +343,11 @@ export const ProductsQuerySchema = z.object({
     .openapi({ description: "Search by name or stock code" }),
   sortBy: z
     .enum(["name", "price", "stockCode", "status", "stockQuantity"])
-    .default("name")
+    .default("stockCode")
     .openapi({ description: "Field to sort by" }),
   sortOrder: z
     .enum(["asc", "desc"])
-    .default("asc")
+    .default("desc")
     .openapi({ description: "Sort direction" }),
 });
 
@@ -368,7 +371,50 @@ export const FirmCodeAndBarcodeParamsSchema = z.object({
     .string()
     .min(1)
     .openapi({ description: "The firm code", example: "00555" }),
+  barcode,
 });
+
+export const StockRowSchema = z
+  .object({
+    stockCode: z.string().min(1).openapi({ example: "STK001" }),
+    name: z.string().min(1).openapi({ example: "Ürün Adı" }),
+    price: z.string().default("0").openapi({ example: "29.99" }),
+    currency: z.string().default("TRY").openapi({ example: "TRY" }),
+    vat: z.coerce.number().default(0).openapi({ example: 18 }),
+    minQuantity: z.coerce.number().default(1).openapi({ example: 1 }),
+    unit: z.string().default("AD").openapi({ example: "AD" }),
+    barcodes: z.string().array().max(5).openapi({ example: ["8690000000001"] }),
+  })
+  .openapi("StockRow");
+
+export const RawProductsBodySchema = z
+  .object({
+    products: z.array(StockRowSchema),
+    deleteStale: z.boolean().default(false),
+  })
+  .openapi("RawProductsBody");
+
+export const RawSaveResponseSchema = z
+  .object({
+    message: z.string(),
+    rowCounts: SyncRowCountsSchema,
+  })
+  .openapi("RawSaveResponse");
+
+export const CatalogBodySchema = z
+  .object({
+    file: z
+      .string()
+      .openapi({ type: "string", format: "binary", description: "Image file (max 50 MiB)" }),
+  })
+  .openapi("CatalogBody");
+
+export const CatalogUploadResponseSchema = z
+  .object({
+    filename: z.string(),
+    message: z.string(),
+  })
+  .openapi("CatalogUploadResponse");
 
 export const FirmIdParamSchema = z.object({
   id: z.coerce
