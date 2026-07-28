@@ -1,0 +1,1 @@
+ALTER TABLE "firms" ADD COLUMN "estimated_next_sync_cost" numeric(10, 4);

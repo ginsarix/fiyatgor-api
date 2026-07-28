@@ -13,7 +13,10 @@ import {
   getFirmIdByFirmCode,
   getFirmIdByServerCode,
 } from "../services/firm.js";
-import { findProductByAnyBarcode } from "../services/product.js";
+import {
+  findProductByAnyBarcode,
+  resolveDiscountStatus,
+} from "../services/product.js";
 import { isErrnoException } from "../utils/error.js";
 import { getFilePath } from "../utils/file.js";
 import {
@@ -37,21 +40,21 @@ export function registerPublicRoutes(app: Hono) {
     async (c) => {
       const { serverCode, barcode } = c.req.valid("param");
 
-      const firmId = await getFirmIdByServerCode(db, serverCode);
+      const firm = await getFirmIdByServerCode(db, serverCode);
 
-      if (!firmId) {
+      if (!firm) {
         return c.json(
           { message: `${serverCode} sunucu kodlu bir firma bulunamadı` },
           404,
         );
       }
 
-      const product = await findProductByAnyBarcode(db, firmId, barcode);
+      const product = await findProductByAnyBarcode(db, firm.id, barcode);
 
       if (!product) return c.json({ message: "Ürün bulunamadı" }, 404);
 
       return c.json({
-        product,
+        product: resolveDiscountStatus(product, firm.discountsEnabled),
         message: "Eşleşen ürün başarıyla getirildi",
       });
     },
@@ -71,21 +74,21 @@ export function registerPublicRoutes(app: Hono) {
     async (c) => {
       const { firmCode, barcode } = c.req.valid("param");
 
-      const firmId = await getFirmIdByFirmCode(db, firmCode);
+      const firm = await getFirmIdByFirmCode(db, firmCode);
 
-      if (!firmId) {
+      if (!firm) {
         return c.json(
           { message: `${firmCode} firma kodlu bir firma bulunamadı` },
           404,
         );
       }
 
-      const product = await findProductByAnyBarcode(db, firmId, barcode);
+      const product = await findProductByAnyBarcode(db, firm.id, barcode);
 
       if (!product) return c.json({ message: "Ürün bulunamadı" }, 404);
 
       return c.json({
-        product,
+        product: resolveDiscountStatus(product, firm.discountsEnabled),
         message: "Eşleşen ürün başarıyla getirildi",
       });
     },
@@ -142,14 +145,14 @@ export function registerPublicRoutes(app: Hono) {
     async (c) => {
       const { serverCode } = c.req.valid("param");
 
-      const firmId = await getFirmIdByServerCode(db, serverCode);
+      const firm = await getFirmIdByServerCode(db, serverCode);
 
-      if (!firmId) return c.html(catalogNotFoundPageHTML, 404);
+      if (!firm) return c.html(catalogNotFoundPageHTML, 404);
 
       const [catalog] = await db
         .select()
         .from(catalogsTable)
-        .where(eq(catalogsTable.firmId, firmId));
+        .where(eq(catalogsTable.firmId, firm.id));
 
       if (!catalog) return c.html(catalogNotFoundPageHTML, 404);
 
@@ -172,14 +175,14 @@ export function registerPublicRoutes(app: Hono) {
     async (c) => {
       const { firmCode } = c.req.valid("param");
 
-      const firmId = await getFirmIdByFirmCode(db, firmCode);
+      const firm = await getFirmIdByFirmCode(db, firmCode);
 
-      if (!firmId) return c.html(catalogNotFoundPageHTML, 404);
+      if (!firm) return c.html(catalogNotFoundPageHTML, 404);
 
       const [catalog] = await db
         .select()
         .from(catalogsTable)
-        .where(eq(catalogsTable.firmId, firmId));
+        .where(eq(catalogsTable.firmId, firm.id));
 
       if (!catalog) return c.html(catalogNotFoundPageHTML, 404);
 

@@ -113,6 +113,27 @@
       "when": 1776673477888,
       "tag": "0015_woozy_celestials",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1785160934084,
+      "tag": "0016_elite_luckman",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1785230820225,
+      "tag": "0017_nice_johnny_blaze",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1785233487185,
+      "tag": "0018_slim_nomad",
+      "breakpoints": true
     }
   ]
 }

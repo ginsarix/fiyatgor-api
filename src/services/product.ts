@@ -24,6 +24,12 @@ import {
   productsTable,
   type SelectableProduct,
 } from "../db/schemas/products.js";
+import {
+  computeProductDiscounts,
+  estimateNextSyncCost,
+  fetchActiveSpecialOffers,
+  type ProductDiscount,
+} from "./discounts.js";
 import { dia } from "../helpers/dia.js";
 import type { DiaListRequest } from "../types/dia-requests.js";
 import type { DiaResponse, DiaStock } from "../types/dia-responses.js";
@@ -77,20 +83,29 @@ export async function saveProducts(
   stocks: DiaStock[],
   firmId: number,
   priceField: InferEnum<typeof priceFieldEnum>,
+  discounts: Map<string, ProductDiscount> = new Map(),
 ) {
-  const products: InsertableProduct[] = stocks.map((s) => ({
-    firmId,
-    diaKey: Number(s._key),
-    stockCode: s.stokkartkodu,
-    name: s.aciklama,
-    price: s[priceField] ?? "",
-    currency: s.doviz1,
-    vat: Number(s.kdvsatis),
-    status: s.durum === "A" ? "active" : "passive",
-    minQuantity: Number(s.minsiparismiktari),
-    unit: s.birimadi,
-    image: s.aws_url,
-  }));
+  const products: InsertableProduct[] = stocks.map((s) => {
+    const discount = discounts.get(s._key);
+
+    return {
+      firmId,
+      diaKey: Number(s._key),
+      stockCode: s.stokkartkodu,
+      name: s.aciklama,
+      price: s[priceField] ?? "",
+      currency: s.doviz1,
+      vat: Number(s.kdvsatis),
+      status: s.durum === "A" ? "active" : "passive",
+      minQuantity: Number(s.minsiparismiktari),
+      unit: s.birimadi,
+      image: s.aws_url,
+      discountedPrice: discount?.discountedPrice ?? null,
+      discountStartsAt: discount?.discountStartsAt ?? null,
+      discountEndsAt: discount?.discountEndsAt ?? null,
+      discountDetail: discount?.discountDetail ?? null,
+    };
+  });
 
   const chunkSize = 300;
 
@@ -119,6 +134,10 @@ export async function saveProducts(
             minQuantity: sql`excluded.min_quantity`,
             unit: sql`excluded.unit`,
             image: sql`excluded.image`,
+            discountedPrice: sql`excluded.discounted_price`,
+            discountStartsAt: sql`excluded.discount_starts_at`,
+            discountEndsAt: sql`excluded.discount_ends_at`,
+            discountDetail: sql`excluded.discount_detail`,
             updatedAt: new Date(),
           },
 
@@ -132,7 +151,11 @@ export async function saveProducts(
               products.status IS DISTINCT FROM excluded.status OR
               products.min_quantity IS DISTINCT FROM excluded.min_quantity OR
               products.unit IS DISTINCT FROM excluded.unit OR
-              products.image IS DISTINCT FROM excluded.image
+              products.image IS DISTINCT FROM excluded.image OR
+              products.discounted_price IS DISTINCT FROM excluded.discounted_price OR
+              products.discount_starts_at IS DISTINCT FROM excluded.discount_starts_at OR
+              products.discount_ends_at IS DISTINCT FROM excluded.discount_ends_at OR
+              products.discount_detail IS DISTINCT FROM excluded.discount_detail
             `,
         })
         .returning({
@@ -151,6 +174,10 @@ export async function saveProducts(
           minQuantity: productsTable.minQuantity,
           unit: productsTable.unit,
           image: productsTable.image,
+          discountedPrice: productsTable.discountedPrice,
+          discountStartsAt: productsTable.discountStartsAt,
+          discountEndsAt: productsTable.discountEndsAt,
+          discountDetail: productsTable.discountDetail,
           inserted: sql<boolean>`xmax = 0`,
         });
 
@@ -368,6 +395,7 @@ export type LoadProductsFirmParam = {
   firmId: number;
   priceField: InferEnum<typeof priceFieldEnum>;
   maxProductNameCharacters: number | null;
+  discountsEnabled: boolean;
 };
 
 export async function loadProducts(
@@ -380,6 +408,7 @@ export async function loadProducts(
   let finalPriceField = firmInfo?.priceField ?? "fiyat1";
   let finalMaxProductNameCharacters =
     firmInfo?.maxProductNameCharacters ?? null;
+  let finalDiscountsEnabled = firmInfo?.discountsEnabled ?? false;
 
   if (!finalFirmId) {
     // get the firm id using serverCode
@@ -388,6 +417,7 @@ export async function loadProducts(
         firmId: firmsTable.id,
         priceField: firmsTable.priceField,
         maxProductNameCharacters: firmsTable.maxProductNameCharacters,
+        discountsEnabled: firmsTable.discountsEnabled,
       })
       .from(firmsTable)
       .where(eq(firmsTable.diaServerCode, serverCode));
@@ -401,6 +431,7 @@ export async function loadProducts(
     finalFirmId = firm.firmId;
     finalPriceField = firm.priceField;
     finalMaxProductNameCharacters = firm.maxProductNameCharacters;
+    finalDiscountsEnabled = firm.discountsEnabled;
   }
 
   const listele = request.scf_stokkart_detay_listele;
@@ -432,7 +463,31 @@ export async function loadProducts(
         }))
       : fetchedProducts.result;
 
-  return await saveProducts(db, finalProducts, finalFirmId, finalPriceField);
+  // skip the special-offer fetch/computation entirely for firms that don't have discounts turned on
+  let discounts: Map<string, ProductDiscount> = new Map();
+  if (finalDiscountsEnabled) {
+    const { offers, discountCount } = await fetchActiveSpecialOffers(
+      db,
+      serverCode,
+      listele.firma_kodu,
+    );
+    discounts = computeProductDiscounts(finalProducts, offers, finalPriceField);
+
+    // estimate for the *next* sync, based on the discount count seen just now — may drift if
+    // discounts are added/removed in DIA before that next sync actually runs
+    await db
+      .update(firmsTable)
+      .set({ estimatedNextSyncCost: estimateNextSyncCost(discountCount) })
+      .where(eq(firmsTable.id, finalFirmId));
+  }
+
+  return await saveProducts(
+    db,
+    finalProducts,
+    finalFirmId,
+    finalPriceField,
+    discounts,
+  );
 }
 
 export type RawProductInput = {
@@ -631,6 +686,44 @@ export async function saveRawProducts(
     insertedBarcodeRowsCount,
     updatedBarcodeRowsCount,
     deletedProductRowsCount,
+  };
+}
+
+type ProductWithDiscountFields = {
+  discountedPrice: string | null;
+  discountStartsAt: Date | null;
+  discountEndsAt: Date | null;
+  discountDetail: string | null;
+};
+
+/**
+ * a discount is only active if the firm has discounts enabled, it has a computed price, and now
+ * falls within its start/end window; discount fields are nulled out for the caller when it isn't,
+ * and `discountActive` reflects the result. discountsEnabled is checked here (not just at sync
+ * time) so a firm that turns discounts off sees the effect immediately, without waiting on the
+ * next sync to clear out previously-computed discount data.
+ */
+export function resolveDiscountStatus<T extends ProductWithDiscountFields>(
+  product: T,
+  discountsEnabled: boolean,
+): T & { discountActive: boolean } {
+  const now = new Date();
+
+  const discountActive =
+    discountsEnabled &&
+    product.discountedPrice !== null &&
+    product.discountStartsAt !== null &&
+    product.discountEndsAt !== null &&
+    now >= product.discountStartsAt &&
+    now <= product.discountEndsAt;
+
+  return {
+    ...product,
+    discountedPrice: discountActive ? product.discountedPrice : null,
+    discountStartsAt: discountActive ? product.discountStartsAt : null,
+    discountEndsAt: discountActive ? product.discountEndsAt : null,
+    discountDetail: discountActive ? product.discountDetail : null,
+    discountActive,
   };
 }
 

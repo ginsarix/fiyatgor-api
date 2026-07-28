@@ -28,9 +28,18 @@ export const productsTable = pgTable(
     diaKey: integer("dia_key").unique(),
     stockCode: text("stock_code").notNull(),
     name: text().notNull(),
+
+
+    discountedPrice: decimal("discounted_price", { precision: 18, scale: 4 }),
+    discountStartsAt: timestamp('discount_starts_at', { withTimezone: true }),
+    discountEndsAt: timestamp('discount_ends_at', { withTimezone: true }),
+    discountDetail: text('discount_detail'),
+
     price: decimal({ precision: 18, scale: 4 }).notNull(),
+
     currency: char({ length: 3 }),
     vat: integer(),
+
     stockQuantity: integer("stock_quantity").default(0).notNull(),
     status: productStatusEnum().default("active").notNull(),
     minQuantity: integer("min_quantity").default(1).notNull(),

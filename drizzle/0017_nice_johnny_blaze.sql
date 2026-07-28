@@ -1,0 +1,1 @@
+ALTER TABLE "firms" ADD COLUMN "discounts_enabled" boolean DEFAULT false NOT NULL;

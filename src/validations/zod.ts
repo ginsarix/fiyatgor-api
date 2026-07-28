@@ -50,6 +50,12 @@ export const firmFormValidation = z.object({
     })
     .nullish()
     .default(null),
+
+  // no zod .default() here: under .partial() (used by PATCH routes) a default fires even when
+  // the key is entirely absent from the request body, which would silently reset this field on
+  // every unrelated firm update. leaving it optional lets the DB column's own default apply
+  // instead, only on creation, when it's genuinely omitted.
+  discountsEnabled: z.boolean().optional(),
 });
 
 export const userFormValidation = z.object({

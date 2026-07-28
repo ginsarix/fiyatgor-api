@@ -88,6 +88,17 @@ export const FirmFullSchema = z
       "fiyat6", "fiyat7", "fiyat8", "fiyat9", "fiyat10",
     ]),
     maxProductNameCharacters: z.number().int().nullable(),
+    discountsEnabled: z
+      .boolean()
+      .describe(
+        "Whether DIA campaign discounts are fetched on sync and surfaced on public product lookups. Off by default.",
+      ),
+    estimatedNextSyncCost: z
+      .string()
+      .nullable()
+      .describe(
+        "Estimated DIA WS credit cost of the next sync, computed from the discount count seen on the last discounts-enabled sync. Null until that has run at least once. Only meaningful while discountsEnabled is true.",
+      ),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime().nullable(),
   })
@@ -169,6 +180,16 @@ export const BarcodeSchema = z
 
 // ─── Product ─────────────────────────────────────────────────────────────────
 
+const discountFields = {
+  discountedPrice: z
+    .string()
+    .nullable()
+    .describe("Decimal value as string (precision 18, scale 4)"),
+  discountStartsAt: z.string().datetime().nullable(),
+  discountEndsAt: z.string().datetime().nullable(),
+  discountDetail: z.string().nullable(),
+};
+
 export const ProductSchema = z
   .object({
     id: z.number().int(),
@@ -186,6 +207,7 @@ export const ProductSchema = z
     minQuantity: z.number().int(),
     unit: z.string(),
     image: z.string().nullable(),
+    ...discountFields,
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime().nullable(),
   })
@@ -208,6 +230,12 @@ export const ProductWithBarcodesSchema = z
     minQuantity: z.number().int(),
     unit: z.string(),
     image: z.string().nullable(),
+    ...discountFields,
+    discountActive: z
+      .boolean()
+      .describe(
+        "Whether the discount is currently within its start/end window. Discount fields are null when false.",
+      ),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime().nullable(),
     equivalentBarcodes: z.array(BarcodeSchema),
@@ -300,6 +328,12 @@ export const FirmFormBodySchema = z
       ])
       .default("fiyat1"),
     maxProductNameCharacters: z.number().int().positive().nullish(),
+    discountsEnabled: z
+      .boolean()
+      .optional()
+      .describe(
+        "Whether DIA campaign discounts are fetched on sync and surfaced on public product lookups. Defaults to false on creation.",
+      ),
   })
   .openapi("FirmFormBody");
 

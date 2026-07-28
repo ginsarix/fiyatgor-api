@@ -32,6 +32,10 @@ export type DiaListParams = {
   offset?: number;
 };
 
+export type DiaGetParams = {
+  key: number;
+}
+
 // I l❤️ve Typescript
 export type DiaRequest<KService extends string> = {
   [K in KService]: {
@@ -65,4 +69,10 @@ export type DiaPingRequest = {
 export type DiaListRequest<KS extends string> = NestedIntersect<
   DiaRequest<KS>,
   DiaListParams
->;
+  >;
+
+  // for getting single rows with a key
+  export type DiaGetRequest<KS extends string> = NestedIntersect<
+    DiaRequest<KS>,
+    DiaGetParams
+  >

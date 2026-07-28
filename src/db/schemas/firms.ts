@@ -1,4 +1,6 @@
 import {
+  boolean,
+  decimal,
   index,
   integer,
   pgEnum,
@@ -35,6 +37,15 @@ export const firmsTable = pgTable(
 
     priceField: priceFieldEnum().notNull().default("fiyat1"),
     maxProductNameCharacters: integer("max_product_name_characters"),
+    // off by default — settable by the firm's own users (PATCH /admin/firm) or a superadmin
+    discountsEnabled: boolean("discounts_enabled").notNull().default(false),
+    // DIA credit estimate for the next sync, computed from the discount count seen on the last
+    // sync that had discounts enabled — an estimate because discounts may change in DIA before
+    // the next sync actually runs. null until a discounts-enabled sync has run at least once.
+    estimatedNextSyncCost: decimal("estimated_next_sync_cost", {
+      precision: 10,
+      scale: 4,
+    }),
 
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()

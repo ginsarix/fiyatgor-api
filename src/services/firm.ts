@@ -18,20 +18,20 @@ export async function getFirmByServerCode(db: DB, serverCode: string) {
 
 export async function getFirmIdByFirmCode(db: DB, firmCode: string) {
   const [firm] = await db
-    .select({ id: firmsTable.id })
+    .select({ id: firmsTable.id, discountsEnabled: firmsTable.discountsEnabled })
     .from(firmsTable)
     .where(eq(firmsTable.firmCode, firmCode));
 
-  return firm ? firm.id : null;
+  return firm ?? null;
 }
 
 export async function getFirmIdByServerCode(db: DB, serverCode: string) {
   const [firm] = await db
-    .select()
+    .select({ id: firmsTable.id, discountsEnabled: firmsTable.discountsEnabled })
     .from(firmsTable)
     .where(eq(firmsTable.diaServerCode, serverCode));
 
-  return firm ? firm.id : null;
+  return firm ?? null;
 }
 
 export async function getFirmById(db: DB, id: number) {

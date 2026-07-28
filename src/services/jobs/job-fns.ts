@@ -44,6 +44,7 @@ export async function loadJobsFromDB(db: DB) {
         firmId: jobs.firmId,
         priceField: firms.priceField,
         maxProductNameCharacters: firms.maxProductNameCharacters,
+        discountsEnabled: firms.discountsEnabled,
       }).catch((err) => console.error("Job failed: ", err)),
     );
   }
