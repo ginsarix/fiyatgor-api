@@ -1,0 +1,4 @@
+allowBuilds:
+  '@sentry/cli': true
+  bcrypt: true
+  esbuild: true
