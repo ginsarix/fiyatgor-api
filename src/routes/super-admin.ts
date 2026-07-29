@@ -91,6 +91,7 @@ export function registerSuperAdminRoutes(app: Hono) {
       name: f.name,
       diaServerCode: f.diaServerCode,
       diaFirmCode: f.diaFirmCode,
+      discountsEnabled: f.discountsEnabled,
       createdAt: f.createdAt,
       updatedAt: f.updatedAt,
     }));
