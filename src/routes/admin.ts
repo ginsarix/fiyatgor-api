@@ -64,7 +64,6 @@ export function registerAdminRoutes(app: Hono) {
         firmId: firm.id,
         priceField: firm.priceField,
         maxProductNameCharacters: firm.maxProductNameCharacters,
-        discountsEnabled: firm.discountsEnabled,
       },
     );
 
@@ -144,7 +143,6 @@ export function registerAdminRoutes(app: Hono) {
               firmId: firm.id,
               priceField: firm.priceField,
               maxProductNameCharacters: firm.maxProductNameCharacters,
-              discountsEnabled: firm.discountsEnabled,
             }).catch((err) => console.error("Job failed: ", err)),
         );
 
@@ -166,7 +164,6 @@ export function registerAdminRoutes(app: Hono) {
           firmId: firm.id,
           priceField: firm.priceField,
           maxProductNameCharacters: firm.maxProductNameCharacters,
-          discountsEnabled: firm.discountsEnabled,
         }).catch((err) => console.error("Job failed: ", err)),
       );
 

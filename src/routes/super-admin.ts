@@ -235,7 +235,6 @@ export function registerSuperAdminRoutes(app: Hono) {
                 firmId: createdFirm.id,
                 priceField: createdFirm.priceField,
                 maxProductNameCharacters: createdFirm.maxProductNameCharacters,
-                discountsEnabled: createdFirm.discountsEnabled,
               },
             ),
         );
