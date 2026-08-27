@@ -1,7 +1,5 @@
-import type { InferEnum } from "drizzle-orm";
 import { ONLY_ACTIVE_FILTER } from "../constants/dia.js";
 import type { DB } from "../db/index.js";
-import type { priceFieldEnum } from "../db/schemas/firms.js";
 import { dia } from "../helpers/dia.js";
 import type { DiaGetRequest, DiaListRequest } from "../types/dia-requests.js";
 import type {
