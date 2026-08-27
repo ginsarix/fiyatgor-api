@@ -4,12 +4,14 @@ import {
   decimal,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
   timestamp,
   unique,
 } from "drizzle-orm/pg-core";
+import type { DiaMatchKeys } from "../../types/dia-responses.js";
 import { barcodesTable } from "./barcodes.js";
 import { firmsTable } from "./firms.js";
 
@@ -34,6 +36,10 @@ export const productsTable = pgTable(
     discountStartsAt: timestamp('discount_starts_at', { withTimezone: true }),
     discountEndsAt: timestamp('discount_ends_at', { withTimezone: true }),
     discountDetail: text('discount_detail'),
+
+    // DIA classification keys captured at sync time, used to re-run discount matching later
+    // purely from persisted data — see DiaMatchKeys and recomputeFirmProductDiscounts
+    diaMatchKeys: jsonb("dia_match_keys").$type<DiaMatchKeys>(),
 
     price: decimal({ precision: 18, scale: 4 }).notNull(),
 
