@@ -11,10 +11,16 @@ import {
 	ProductsResponseSchema,
 	RawProductsBodySchema,
 	RawSaveResponseSchema,
+	SpecialOfferSyncResponseSchema,
+	SpecialOffersQuerySchema,
+	SpecialOffersResponseSchema,
+	SpecialOfferIdParamSchema,
 	SyncResponseSchema,
 	UpdatedFirmResponseSchema,
 	UpdatedJobResponseSchema,
 	UpdateFirmBodySchema,
+	UpdateSpecialOfferBodySchema,
+	UpdateSpecialOfferResponseSchema,
 	UpdateUserBodySchema,
 	UserResponseSchema,
 } from '../schemas.js';
@@ -375,6 +381,108 @@ export const updateMeRoute = createRoute({
 		401: {
 			content: { 'application/json': { schema: MessageSchema } },
 			description: 'Not authenticated',
+		},
+		422: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Validation error',
+		},
+	},
+});
+
+export const syncSpecialOffersRoute = createRoute({
+	method: 'post',
+	path: '/admin/special-offers/sync',
+	tags: ['Admin – Special Offers'],
+	summary: 'Sync special offers from DIA',
+	description:
+		'Fetches the firm\'s currently-active DIA special offers, persists them, deletes offers DIA no longer returns, and recomputes product discounts. Requires the firm to have DIA connection details configured.',
+	security: adminSecurity,
+	responses: {
+		200: {
+			content: { 'application/json': { schema: SpecialOfferSyncResponseSchema } },
+			description: 'Sync completed successfully',
+		},
+		400: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Firm has no DIA connection details configured',
+		},
+		401: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Not authenticated',
+		},
+		403: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Firm access denied',
+		},
+	},
+});
+
+export const getSpecialOffersRoute = createRoute({
+	method: 'get',
+	path: '/admin/special-offers',
+	tags: ['Admin – Special Offers'],
+	summary: 'List special offers',
+	description: 'Returns a paginated list of special offers for the authenticated firm. Supports search and sorting.',
+	security: adminSecurity,
+	request: {
+		query: SpecialOffersQuerySchema,
+	},
+	responses: {
+		200: {
+			content: { 'application/json': { schema: SpecialOffersResponseSchema } },
+			description: 'Special offers retrieved successfully',
+		},
+		401: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Not authenticated',
+		},
+		403: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Firm access denied',
+		},
+		422: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Validation error',
+		},
+	},
+});
+
+export const updateSpecialOfferRoute = createRoute({
+	method: 'patch',
+	path: '/admin/special-offers/{id}',
+	tags: ['Admin – Special Offers'],
+	summary: 'Enable or disable a special offer',
+	description:
+		"Updates a single special offer's enabled state for the authenticated firm and immediately recomputes affected product discounts.",
+	security: adminSecurity,
+	request: {
+		params: SpecialOfferIdParamSchema,
+		body: {
+			content: {
+				'application/json': {
+					schema: UpdateSpecialOfferBodySchema,
+				},
+			},
+			required: true,
+			description: 'New enabled state',
+		},
+	},
+	responses: {
+		200: {
+			content: { 'application/json': { schema: UpdateSpecialOfferResponseSchema } },
+			description: 'Special offer updated successfully',
+		},
+		401: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Not authenticated',
+		},
+		403: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Firm access denied',
+		},
+		404: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Special offer not found',
 		},
 		422: {
 			content: { 'application/json': { schema: MessageSchema } },
