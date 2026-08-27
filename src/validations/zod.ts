@@ -71,6 +71,10 @@ export const jobValidation = z.object({
   unit: z.enum(["minute", "hour", "day", "month"]),
 });
 
+export const setSpecialOfferEnabledValidation = z.object({
+  enabled: z.boolean(),
+});
+
 export const stockRowSchema = z.object({
   stockCode: z.string().min(1, { error: "Stok Kart Kodu boş olamaz" }),
   name: z.string().min(1, { error: "Ürün adı boş olamaz" }),

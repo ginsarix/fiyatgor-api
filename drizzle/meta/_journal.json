@@ -134,6 +134,13 @@
       "when": 1785233487185,
       "tag": "0018_slim_nomad",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1787830891026,
+      "tag": "0019_colossal_plazm",
+      "breakpoints": true
     }
   ]
 }

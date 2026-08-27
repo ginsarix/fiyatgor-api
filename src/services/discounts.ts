@@ -1,10 +1,9 @@
-import type { InferEnum } from "drizzle-orm";
 import { ONLY_ACTIVE_FILTER } from "../constants/dia.js";
 import type { DB } from "../db/index.js";
-import type { priceFieldEnum } from "../db/schemas/firms.js";
 import { dia } from "../helpers/dia.js";
 import type { DiaGetRequest, DiaListRequest } from "../types/dia-requests.js";
 import type {
+  DiaMatchKeys,
   DiaSpecialCode,
   DiaSpecialOffer,
   DiaSpecialOfferGetResponse,
@@ -20,6 +19,7 @@ const INDIRIM_FIELD_COUNT = 20; // indirim2..indirim20
 
 export type SpecialOffersResult = {
   offers: DiaSpecialOffer[];
+  listedKeys: number[];
   // number of scf_kampanya_getir calls made — the listele step doesn't expose the discount
   // data we need, so we have to fetch each active offer individually, and each of those
   // fetches (unlike login/logout/remaining-credit lookups) consumes paid DIA credits
@@ -62,7 +62,9 @@ export async function fetchActiveSpecialOffers(
     if (getResponse.result) offers.push(getResponse.result);
   }
 
-  return { offers, discountCount: listResponse.result.length };
+  const listedKeys = listResponse.result.map(({ _key }) => Number(_key));
+
+  return { offers, listedKeys, discountCount: listResponse.result.length };
 }
 
 type SpecialOfferKalem = DiaSpecialOffer["m_kalemler"][number];
@@ -82,23 +84,46 @@ function specialCodeArrayMatches(
   );
 }
 
-// a kalem (campaign line item) applies to a stock if the stock is targeted directly by key,
-// by brand, or by any özel kod slot (same slot number on both sides)
-function kalemMatchesStock(kalem: SpecialOfferKalem, stock: DiaStock): boolean {
+// converts a live DIA stock response into the subset of fields needed to match it against a
+// special offer later, purely from our own DB (see DiaMatchKeys)
+export function extractDiaMatchKeys(stock: DiaStock): DiaMatchKeys {
+  return {
+    marka: stock._key_scf_marka,
+    ozelkod1: stock._key_sis_ozelkod1,
+    ozelkod2: stock._key_sis_ozelkod2,
+    ozelkod3: stock._key_sis_ozelkod3,
+    ozelkod4: stock._key_sis_ozelkod4,
+    ozelkod5: stock._key_sis_ozelkod5,
+    ozelkod6: stock._key_sis_ozelkod6,
+    ozelkod7: stock._key_sis_ozelkod7,
+    ozelkod8: stock._key_sis_ozelkod8,
+    ozelkod9: stock._key_sis_ozelkod9,
+    ozelkod10: stock._key_sis_ozelkod10,
+    ozelkod11: stock._key_sis_ozelkod11,
+  };
+}
+
+// a kalem (campaign line item) applies to a product if the product is targeted directly by
+// key, by brand, or by any özel kod slot (same slot number on both sides)
+function kalemMatchesStock(
+  kalem: SpecialOfferKalem,
+  productDiaKey: number,
+  matchKeys: DiaMatchKeys,
+): boolean {
   const kalemStockKey = String(kalem._key_scf_kart);
-  if (!isUnset(kalemStockKey) && kalemStockKey === stock._key) return true;
+  if (!isUnset(kalemStockKey) && kalemStockKey === String(productDiaKey)) {
+    return true;
+  }
 
   if (
-    !isUnset(stock._key_scf_marka) &&
-    specialCodeArrayMatches(kalem._key_scf_marka_kart_array, stock._key_scf_marka)
+    !isUnset(matchKeys.marka) &&
+    specialCodeArrayMatches(kalem._key_scf_marka_kart_array, matchKeys.marka)
   ) {
     return true;
   }
 
   for (let slot = 1; slot <= OZELKOD_SLOT_COUNT; slot++) {
-    const stockOzelkod = stock[
-      `_key_sis_ozelkod${slot}` as keyof DiaStock
-    ] as string;
+    const stockOzelkod = matchKeys[`ozelkod${slot}` as keyof DiaMatchKeys];
     if (isUnset(stockOzelkod)) continue;
 
     const campaignOzelkodArray = kalem[
@@ -125,12 +150,13 @@ function applyCascadingDiscount(basePrice: number, kalem: SpecialOfferKalem): nu
   return price;
 }
 
-function parseDiaDateTime(date: string, time: string): Date {
+export function parseDiaDateTime(date: string, time: string): Date {
   return new Date(`${date}T${time}`);
 }
 
-// how much of a DIA WS credit a single fetch costs, per DIA's pricing — the same rate applies
-// to the one scf_stokkart_detay_listele call and every scf_kampanya_getir call
+// how much of a DIA WS credit a single scf_kampanya_getir call costs, per DIA's pricing.
+// estimateNextSyncCost's "+1" below covers the scf_kampanya_listele call this same
+// special-offer sync also makes.
 const DIA_CREDIT_COST_PER_FETCH = 0.025;
 
 export function estimateNextSyncCost(discountCount: number): string {
@@ -146,35 +172,48 @@ export type ProductDiscount = {
   discountDetail: string;
 };
 
-/**
- * @returns a map keyed by stock._key (DIA product key) with the winning discount per stock.
- * When a stock matches multiple offers, the one with the lowest `oncelik` wins; ties go to
- * whichever matching offer was encountered first.
- */
-export function computeProductDiscounts(
-  stocks: DiaStock[],
-  offers: DiaSpecialOffer[],
-  priceField: InferEnum<typeof priceFieldEnum>,
-): Map<string, ProductDiscount> {
-  const discounts = new Map<string, ProductDiscount>();
-  const winningOncelik = new Map<string, number>();
+export type ProductForDiscountMatch = {
+  diaKey: number;
+  price: string;
+  diaMatchKeys: DiaMatchKeys | null;
+};
 
-  for (const stock of stocks) {
-    const basePrice = Number(stock[priceField] ?? 0);
+/**
+ * @returns a map keyed by product diaKey with the winning discount per product. Mirrors the
+ * matching/priority/cascading rules of the original DIA-stock-based computation, but reads
+ * persisted product rows + persisted offers instead of requiring a live DIA fetch — this is
+ * what lets discount recomputation run immediately from an offer toggle or fetch without
+ * calling DIA (see recomputeFirmProductDiscounts in special-offers.ts). A product with no
+ * persisted diaMatchKeys (never synced from DIA, e.g. a manually-entered raw product) is
+ * skipped entirely.
+ */
+export function computeDiscountsFromMatchKeys(
+  products: ProductForDiscountMatch[],
+  offers: DiaSpecialOffer[],
+): Map<number, ProductDiscount> {
+  const discounts = new Map<number, ProductDiscount>();
+  const winningOncelik = new Map<number, number>();
+
+  for (const product of products) {
+    if (!product.diaMatchKeys) continue;
+
+    const basePrice = Number(product.price ?? 0);
 
     for (const offer of offers) {
       const oncelik = Number(offer.oncelik);
 
-      const currentWinnerOncelik = winningOncelik.get(stock._key);
+      const currentWinnerOncelik = winningOncelik.get(product.diaKey);
       if (currentWinnerOncelik !== undefined && oncelik >= currentWinnerOncelik) {
         continue;
       }
 
-      const kalem = offer.m_kalemler.find((k) => kalemMatchesStock(k, stock));
+      const kalem = offer.m_kalemler.find((k) =>
+        kalemMatchesStock(k, product.diaKey, product.diaMatchKeys as DiaMatchKeys),
+      );
       if (!kalem) continue;
 
-      winningOncelik.set(stock._key, oncelik);
-      discounts.set(stock._key, {
+      winningOncelik.set(product.diaKey, oncelik);
+      discounts.set(product.diaKey, {
         discountedPrice: applyCascadingDiscount(basePrice, kalem).toFixed(4),
         discountStartsAt: parseDiaDateTime(offer.bastarih, offer.bassaat),
         discountEndsAt: parseDiaDateTime(offer.bittarih, offer.bitsaat),

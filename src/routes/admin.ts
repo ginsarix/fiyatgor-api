@@ -29,6 +29,15 @@ import {
   loadProducts,
   saveRawProducts,
 } from "../services/product.js";
+import {
+  getSpecialOffers,
+  getSpecialOffersCount,
+  setSpecialOfferEnabled,
+  syncSpecialOffers,
+  type GetSpecialOffersOptions,
+  type SortOrder as SpecialOfferSortOrder,
+  type SpecialOfferSortBy,
+} from "../services/special-offers.js";
 import { aesEncrypt } from "../utils/aes-256-gcm.js";
 import { toCronExpression } from "../utils/cron.js";
 import { createFile, getFilePath } from "../utils/file.js";
@@ -36,6 +45,7 @@ import { hash } from "../utils/sha256.js";
 import {
   firmFormValidation,
   jobValidation,
+  setSpecialOfferEnabledValidation,
   stockRowSchema,
   userFormValidation,
 } from "../validations/zod.js";
@@ -64,7 +74,6 @@ export function registerAdminRoutes(app: Hono) {
         firmId: firm.id,
         priceField: firm.priceField,
         maxProductNameCharacters: firm.maxProductNameCharacters,
-        discountsEnabled: firm.discountsEnabled,
       },
     );
 
@@ -144,7 +153,6 @@ export function registerAdminRoutes(app: Hono) {
               firmId: firm.id,
               priceField: firm.priceField,
               maxProductNameCharacters: firm.maxProductNameCharacters,
-              discountsEnabled: firm.discountsEnabled,
             }).catch((err) => console.error("Job failed: ", err)),
         );
 
@@ -166,7 +174,6 @@ export function registerAdminRoutes(app: Hono) {
           firmId: firm.id,
           priceField: firm.priceField,
           maxProductNameCharacters: firm.maxProductNameCharacters,
-          discountsEnabled: firm.discountsEnabled,
         }).catch((err) => console.error("Job failed: ", err)),
       );
 
@@ -415,6 +422,102 @@ export function registerAdminRoutes(app: Hono) {
       }
 
       return buildResponse(existingCatalog.filename);
+    },
+  );
+
+  app.post("/admin/special-offers/sync", adminAuth, firmAuth, async (c) => {
+    const firm = c.get("firm");
+
+    if (!firm.discountsEnabled) {
+      return c.json(
+        { message: "Kampanya indirimleri kapalıyken kampanya eşleştirilemez" },
+        400,
+      );
+    }
+
+    const serverCode = firm.diaServerCode;
+    const diaFirmCode = firm.diaFirmCode;
+
+    if (!serverCode || !diaFirmCode) {
+      return c.json(
+        { message: "DIA bağlantı bilgisi olmadan kampanya eşleştiremezsiniz" },
+        400,
+      );
+    }
+
+    const result = await syncSpecialOffers(db, serverCode, firm.id, diaFirmCode);
+
+    return c.json({ message: "Kampanyalar eşleştirildi", ...result }, 200);
+  });
+
+  app.get(
+    "/admin/special-offers",
+    adminAuth,
+    firmAuth,
+    zValidator(
+      "query",
+      z.object({
+        page: z.coerce.number().int().positive().default(1),
+        limit: z.coerce.number().int().positive().max(100).default(20),
+        search: z.string().min(1).optional(),
+        sortBy: z
+          .enum(["name", "priority", "startsAt", "endsAt", "enabled"])
+          .default("name"),
+        sortOrder: z.enum(["asc", "desc"]).default("desc"),
+      }),
+    ),
+    async (c) => {
+      const { id: firmId } = c.get("firm");
+
+      const { page, limit, search, sortBy, sortOrder } = c.req.valid("query");
+
+      const options: GetSpecialOffersOptions = {
+        page,
+        limit,
+        search,
+        sortBy: sortBy as SpecialOfferSortBy,
+        sortOrder: sortOrder as SpecialOfferSortOrder,
+      };
+
+      const specialOffers = await getSpecialOffers(db, firmId, options);
+
+      return c.json(
+        {
+          specialOffers,
+          rowCount: await getSpecialOffersCount(db, firmId, search),
+          message: "Kampanyalar başarıyla getirildi",
+        },
+        200,
+      );
+    },
+  );
+
+  app.patch(
+    "/admin/special-offers/:id",
+    adminAuth,
+    firmAuth,
+    zValidator("param", z.object({ id: z.coerce.number().int().positive() })),
+    zValidator("json", setSpecialOfferEnabledValidation),
+    async (c) => {
+      const { id: firmId } = c.get("firm");
+      const { id } = c.req.valid("param");
+      const { enabled } = c.req.valid("json");
+
+      const result = await setSpecialOfferEnabled(db, firmId, id, enabled);
+
+      if (!result) {
+        return c.json({ message: "Kampanya bulunamadı" }, 404);
+      }
+
+      return c.json(
+        {
+          message: "Kampanya güncellendi",
+          specialOffer: result.specialOffer,
+          discountedProductCount: result.discountedProductCount,
+          hasSyncedProducts: result.hasSyncedProducts,
+        },
+        200,
+      );
     },
   );
 }

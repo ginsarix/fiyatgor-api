@@ -6,10 +6,13 @@ import {
   getAdminProductsRoute,
   getJobRoute,
   getMeRoute,
+  getSpecialOffersRoute,
   saveRawProductsRoute,
   syncProductsRoute,
+  syncSpecialOffersRoute,
   updateAdminFirmRoute,
   updateMeRoute,
+  updateSpecialOfferRoute,
   uploadCatalogRoute,
   upsertJobRoute,
 } from "./routes/admin.routes.js";
@@ -58,6 +61,11 @@ docApp.openapi(getProductByFirmCodeBarcodeRoute, stub);
 docApp.openapi(syncProductsRoute, stub);
 docApp.openapi(saveRawProductsRoute, stub);
 docApp.openapi(getAdminProductsRoute, stub);
+
+// ─── Admin – Special Offers ────────────────────────────────────────────────────
+docApp.openapi(syncSpecialOffersRoute, stub);
+docApp.openapi(getSpecialOffersRoute, stub);
+docApp.openapi(updateSpecialOfferRoute, stub);
 
 // ─── Admin – Jobs ─────────────────────────────────────────────────────────────
 docApp.openapi(upsertJobRoute, stub);

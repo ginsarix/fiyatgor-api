@@ -283,6 +283,60 @@ export const SyncResponseSchema = z
   })
   .openapi("SyncResponse");
 
+// ─── Special Offers ──────────────────────────────────────────────────────────
+
+export const SpecialOfferSchema = z
+  .object({
+    id: z.number().int(),
+    firmId: z.number().int(),
+    diaKey: z.number().int(),
+    enabled: z.boolean(),
+    name: z.string().nullable(),
+    priority: z.string().nullable(),
+    startsAt: z.string().datetime().nullable(),
+    endsAt: z.string().datetime().nullable(),
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime().nullable(),
+  })
+  .openapi("SpecialOffer");
+
+export const SpecialOffersResponseSchema = z
+  .object({
+    message: z.string(),
+    specialOffers: z.array(SpecialOfferSchema),
+    rowCount: z.number().int(),
+  })
+  .openapi("SpecialOffersResponse");
+
+export const SpecialOfferSyncResponseSchema = z
+  .object({
+    message: z.string(),
+    offersSeen: z.number().int(),
+    addedCount: z.number().int(),
+    updatedCount: z.number().int(),
+    removedCount: z.number().int(),
+    discountedProductCount: z.number().int(),
+    hasSyncedProducts: z
+      .boolean()
+      .describe(
+        "Whether this firm has run at least one product sync since diaMatchKeys shipped. False means this offer sync couldn't have changed any product's discount yet — the admin UI should prompt for a one-time product sync.",
+      ),
+  })
+  .openapi("SpecialOfferSyncResponse");
+
+export const UpdateSpecialOfferResponseSchema = z
+  .object({
+    message: z.string(),
+    specialOffer: SpecialOfferSchema,
+    discountedProductCount: z.number().int(),
+    hasSyncedProducts: z
+      .boolean()
+      .describe(
+        "Whether this firm has run at least one product sync since diaMatchKeys shipped. False means this toggle couldn't have changed any product's discount yet — the admin UI should prompt for a one-time product sync.",
+      ),
+  })
+  .openapi("UpdateSpecialOfferResponse");
+
 // ─── Request Bodies ──────────────────────────────────────────────────────────
 
 export const LoginBodySchema = z
@@ -385,6 +439,35 @@ export const ProductsQuerySchema = z.object({
     .openapi({ description: "Sort direction" }),
 });
 
+export const SpecialOffersQuerySchema = z.object({
+  page: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(1)
+    .openapi({ description: "Page number", example: 1 }),
+  limit: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(100)
+    .default(20)
+    .openapi({ description: "Items per page (max 100)", example: 20 }),
+  search: z
+    .string()
+    .min(1)
+    .optional()
+    .openapi({ description: "Search by offer name" }),
+  sortBy: z
+    .enum(["name", "priority", "startsAt", "endsAt", "enabled"])
+    .default("name")
+    .openapi({ description: "Field to sort by" }),
+  sortOrder: z
+    .enum(["asc", "desc"])
+    .default("desc")
+    .openapi({ description: "Sort direction" }),
+});
+
 // ─── Path Params ──────────────────────────────────────────────────────────────
 
 const barcode = z.string().min(1).max(48).openapi({
@@ -435,6 +518,10 @@ export const RawSaveResponseSchema = z
   })
   .openapi("RawSaveResponse");
 
+export const UpdateSpecialOfferBodySchema = z
+  .object({ enabled: z.boolean() })
+  .openapi("UpdateSpecialOfferBody");
+
 export const CatalogBodySchema = z
   .object({
     file: z
@@ -456,4 +543,12 @@ export const FirmIdParamSchema = z.object({
     .int()
     .positive()
     .openapi({ description: "Firm ID", example: 1 }),
+});
+
+export const SpecialOfferIdParamSchema = z.object({
+  id: z.coerce
+    .number()
+    .int()
+    .positive()
+    .openapi({ description: "Special offer ID", example: 1 }),
 });

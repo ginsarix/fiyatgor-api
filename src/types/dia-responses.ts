@@ -49,6 +49,24 @@ export type DiaStock = {
 
 export type DiaStockListResponse = DiaResponse<DiaStock[]>;
 
+// the subset of a DIA stock's classification keys needed to match it against a special
+// offer's line items (kalemMatchesStock) — persisted on products.dia_match_keys so discount
+// matching can be re-run later without a live DIA fetch (see recomputeFirmProductDiscounts)
+export type DiaMatchKeys = {
+  marka: string;
+  ozelkod1: string;
+  ozelkod2: string;
+  ozelkod3: string;
+  ozelkod4: string;
+  ozelkod5: string;
+  ozelkod6: string;
+  ozelkod7: string;
+  ozelkod8: string;
+  ozelkod9: string;
+  ozelkod10: string;
+  ozelkod11: string;
+};
+
 export type DiaSpecialCode = { _key: number; durum: DiaActiveState };
 
 export type DiaSpecialOffer = {
