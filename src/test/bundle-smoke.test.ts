@@ -115,6 +115,9 @@ describe("bundle smoke tests", () => {
   describe("admin routes auth guard", () => {
     const adminRoutes: { method: string; path: string }[] = [
       { method: "POST", path: "/admin/products/sync" },
+      { method: "POST", path: "/admin/special-offers/sync" },
+      { method: "GET", path: "/admin/special-offers" },
+      { method: "PATCH", path: "/admin/special-offers/1" },
       { method: "GET", path: "/admin/products" },
       { method: "GET", path: "/admin/jobs" },
       { method: "POST", path: "/admin/jobs" },
