@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, ilike, isNotNull, notInArray } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, isNotNull, notInArray, or } from "drizzle-orm";
 import type { DB } from "../db/index.js";
 import { firmsTable } from "../db/schemas/firms.js";
 import { productsTable } from "../db/schemas/products.js";
@@ -64,7 +64,17 @@ export async function recomputeFirmProductDiscounts(
         discountEndsAt: null,
         discountDetail: null,
       })
-      .where(eq(productsTable.firmId, firmId));
+      .where(
+        and(
+          eq(productsTable.firmId, firmId),
+          or(
+            isNotNull(productsTable.discountedPrice),
+            isNotNull(productsTable.discountStartsAt),
+            isNotNull(productsTable.discountEndsAt),
+            isNotNull(productsTable.discountDetail),
+          ),
+        ),
+      );
 
     return { discountedProductCount: 0, hasSyncedProducts };
   }
@@ -89,6 +99,10 @@ export async function recomputeFirmProductDiscounts(
       diaKey: productsTable.diaKey,
       price: productsTable.price,
       diaMatchKeys: productsTable.diaMatchKeys,
+      discountedPrice: productsTable.discountedPrice,
+      discountStartsAt: productsTable.discountStartsAt,
+      discountEndsAt: productsTable.discountEndsAt,
+      discountDetail: productsTable.discountDetail,
     })
     .from(productsTable)
     .where(
@@ -119,13 +133,26 @@ export async function recomputeFirmProductDiscounts(
         const discount =
           product.diaKey !== null ? discounts.get(product.diaKey) : undefined;
 
+        const nextDiscountedPrice = discount?.discountedPrice ?? null;
+        const nextDiscountStartsAt = discount?.discountStartsAt ?? null;
+        const nextDiscountEndsAt = discount?.discountEndsAt ?? null;
+        const nextDiscountDetail = discount?.discountDetail ?? null;
+
+        const unchanged =
+          product.discountedPrice === nextDiscountedPrice &&
+          product.discountStartsAt?.getTime() === nextDiscountStartsAt?.getTime() &&
+          product.discountEndsAt?.getTime() === nextDiscountEndsAt?.getTime() &&
+          product.discountDetail === nextDiscountDetail;
+
+        if (unchanged) continue;
+
         await tx
           .update(productsTable)
           .set({
-            discountedPrice: discount?.discountedPrice ?? null,
-            discountStartsAt: discount?.discountStartsAt ?? null,
-            discountEndsAt: discount?.discountEndsAt ?? null,
-            discountDetail: discount?.discountDetail ?? null,
+            discountedPrice: nextDiscountedPrice,
+            discountStartsAt: nextDiscountStartsAt,
+            discountEndsAt: nextDiscountEndsAt,
+            discountDetail: nextDiscountDetail,
           })
           .where(eq(productsTable.id, product.id));
       }
@@ -156,7 +183,7 @@ export async function syncSpecialOffers(
   discountedProductCount: number;
   hasSyncedProducts: boolean;
 }> {
-  const { offers, discountCount } = await fetchActiveSpecialOffers(
+  const { offers, listedKeys, discountCount } = await fetchActiveSpecialOffers(
     db,
     serverCode,
     diaFirmCode,
@@ -202,7 +229,7 @@ export async function syncSpecialOffers(
     else addedCount++;
   }
 
-  const fetchedDiaKeys = offers.map((o) => Number(o._key));
+  const fetchedDiaKeys = listedKeys;
 
   const removed =
     fetchedDiaKeys.length > 0

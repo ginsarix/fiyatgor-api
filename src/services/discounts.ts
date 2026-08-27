@@ -19,6 +19,7 @@ const INDIRIM_FIELD_COUNT = 20; // indirim2..indirim20
 
 export type SpecialOffersResult = {
   offers: DiaSpecialOffer[];
+  listedKeys: number[];
   // number of scf_kampanya_getir calls made — the listele step doesn't expose the discount
   // data we need, so we have to fetch each active offer individually, and each of those
   // fetches (unlike login/logout/remaining-credit lookups) consumes paid DIA credits
@@ -61,7 +62,9 @@ export async function fetchActiveSpecialOffers(
     if (getResponse.result) offers.push(getResponse.result);
   }
 
-  return { offers, discountCount: listResponse.result.length };
+  const listedKeys = listResponse.result.map(({ _key }) => Number(_key));
+
+  return { offers, listedKeys, discountCount: listResponse.result.length };
 }
 
 type SpecialOfferKalem = DiaSpecialOffer["m_kalemler"][number];
@@ -151,8 +154,9 @@ export function parseDiaDateTime(date: string, time: string): Date {
   return new Date(`${date}T${time}`);
 }
 
-// how much of a DIA WS credit a single fetch costs, per DIA's pricing — the same rate applies
-// to the one scf_stokkart_detay_listele call and every scf_kampanya_getir call
+// how much of a DIA WS credit a single scf_kampanya_getir call costs, per DIA's pricing.
+// estimateNextSyncCost's "+1" below covers the scf_kampanya_listele call this same
+// special-offer sync also makes.
 const DIA_CREDIT_COST_PER_FETCH = 0.025;
 
 export function estimateNextSyncCost(discountCount: number): string {

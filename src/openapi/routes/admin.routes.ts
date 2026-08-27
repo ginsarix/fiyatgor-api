@@ -404,7 +404,7 @@ export const syncSpecialOffersRoute = createRoute({
 		},
 		400: {
 			content: { 'application/json': { schema: MessageSchema } },
-			description: 'Firm has no DIA connection details configured',
+			description: 'Firm has no DIA connection details configured, or discounts are disabled for this firm',
 		},
 		401: {
 			content: { 'application/json': { schema: MessageSchema } },

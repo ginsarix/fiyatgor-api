@@ -428,6 +428,13 @@ export function registerAdminRoutes(app: Hono) {
   app.post("/admin/special-offers/sync", adminAuth, firmAuth, async (c) => {
     const firm = c.get("firm");
 
+    if (!firm.discountsEnabled) {
+      return c.json(
+        { message: "Kampanya indirimleri kapalıyken kampanya eşleştirilemez" },
+        400,
+      );
+    }
+
     const serverCode = firm.diaServerCode;
     const diaFirmCode = firm.diaFirmCode;
 
