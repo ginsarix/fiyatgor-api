@@ -26,6 +26,12 @@ export type SpecialOffersResult = {
   discountCount: number;
 };
 
+// how many scf_kampanya_getir calls to have in flight at once — the listele step only gives us
+// keys, so every active offer needs its own get call; running them with bounded concurrency
+// instead of one at a time cuts wall-clock time roughly proportionally without hammering DIA
+// with hundreds of simultaneous requests on one session
+const GETIR_CONCURRENCY = 8;
+
 export async function fetchActiveSpecialOffers(
   db: DB,
   serverCode: string,
@@ -45,26 +51,33 @@ export async function fetchActiveSpecialOffers(
   >(db, { module: "scf", serverCode }, listRequest);
 
   const offers: DiaSpecialOffer[] = [];
+  const keys = listResponse.result.map(({ _key }) => Number(_key));
 
-  for (const { _key } of listResponse.result) {
-    const getRequest: DiaGetRequest<SpecialOfferGetRequestServiceName> = {
-      scf_kampanya_getir: {
-        firma_kodu: diaFirmCode,
-        key: Number(_key),
-      },
-    };
+  for (let i = 0; i < keys.length; i += GETIR_CONCURRENCY) {
+    const batch = keys.slice(i, i + GETIR_CONCURRENCY);
 
-    const getResponse = await dia<
-      SpecialOfferGetRequestServiceName,
-      DiaSpecialOfferGetResponse
-    >(db, { module: "scf", serverCode }, getRequest);
+    const getResponses = await Promise.all(
+      batch.map((key) => {
+        const getRequest: DiaGetRequest<SpecialOfferGetRequestServiceName> = {
+          scf_kampanya_getir: {
+            firma_kodu: diaFirmCode,
+            key,
+          },
+        };
 
-    if (getResponse.result) offers.push(getResponse.result);
+        return dia<
+          SpecialOfferGetRequestServiceName,
+          DiaSpecialOfferGetResponse
+        >(db, { module: "scf", serverCode }, getRequest);
+      }),
+    );
+
+    for (const getResponse of getResponses) {
+      if (getResponse.result) offers.push(getResponse.result);
+    }
   }
 
-  const listedKeys = listResponse.result.map(({ _key }) => Number(_key));
-
-  return { offers, listedKeys, discountCount: listResponse.result.length };
+  return { offers, listedKeys: keys, discountCount: listResponse.result.length };
 }
 
 type SpecialOfferKalem = DiaSpecialOffer["m_kalemler"][number];

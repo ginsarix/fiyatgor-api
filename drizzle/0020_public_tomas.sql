@@ -1,0 +1,1 @@
+ALTER TABLE "firms" ADD COLUMN "last_product_sync_at" timestamp with time zone;

@@ -410,6 +410,17 @@ export const CreateFirmBodySchema = z
 
 // ─── Query Params ─────────────────────────────────────────────────────────────
 
+export const ProductSyncQuerySchema = z.object({
+  mode: z
+    .enum(["full", "quick"])
+    .default("full")
+    .openapi({
+      description:
+        "full re-fetches the firm's entire active catalog from DIA (slow, also reconciles deletions/deactivations). quick fetches only what changed since the last successful sync (fast, but requires at least one prior full sync and never deletes)",
+      example: "full",
+    }),
+});
+
 export const ProductsQuerySchema = z.object({
   page: z.coerce
     .number()

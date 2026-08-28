@@ -27,6 +27,7 @@ import {
   getProducts,
   getProductsCount,
   loadProducts,
+  QuickSyncRequiresFullSyncError,
   saveRawProducts,
 } from "../services/product.js";
 import {
@@ -52,39 +53,66 @@ import {
 } from "../validations/zod.js";
 
 export function registerAdminRoutes(app: Hono) {
-  app.post("/admin/products/sync", adminAuth, firmAuth, async (c) => {
-    const firm = c.get("firm");
+  app.post(
+    "/admin/products/sync",
+    adminAuth,
+    firmAuth,
+    zValidator(
+      "query",
+      z.object({ mode: z.enum(["full", "quick"]).default("full") }),
+    ),
+    async (c) => {
+      const firm = c.get("firm");
+      const { mode } = c.req.valid("query");
 
-    const serverCode = firm.diaServerCode;
-    const diaFirmCode = firm.diaFirmCode;
+      const serverCode = firm.diaServerCode;
+      const diaFirmCode = firm.diaFirmCode;
 
-    if (!serverCode || !diaFirmCode) {
-      return c.json(
-        { message: "DIA bağlantı bilgisi olmadan ürün eşleştiremezsiniz" },
-        400,
-      );
-    }
+      if (!serverCode || !diaFirmCode) {
+        return c.json(
+          { message: "DIA bağlantı bilgisi olmadan ürün eşleştiremezsiniz" },
+          400,
+        );
+      }
 
-    const newRowCounts = await loadProducts(
-      db,
-      serverCode,
-      {
-        scf_stokkart_detay_listele: { firma_kodu: diaFirmCode },
-      },
-      {
-        firmId: firm.id,
-        priceField: firm.priceField,
-        maxProductNameCharacters: firm.maxProductNameCharacters,
-      },
-    );
+      let newRowCounts: Awaited<ReturnType<typeof loadProducts>>;
+      try {
+        newRowCounts = await loadProducts(
+          db,
+          serverCode,
+          {
+            scf_stokkart_detay_listele: { firma_kodu: diaFirmCode },
+          },
+          {
+            firmId: firm.id,
+            priceField: firm.priceField,
+            maxProductNameCharacters: firm.maxProductNameCharacters,
+            lastProductSyncAt: firm.lastProductSyncAt,
+          },
+          mode,
+        );
+      } catch (error) {
+        if (error instanceof QuickSyncRequiresFullSyncError) {
+          return c.json(
+            {
+              message:
+                "Hızlı çalıştırmadan önce en az bir kez tam çalıştırma yapılmalı",
+            },
+            400,
+          );
+        }
 
-    await db
-      .update(jobsTable)
-      .set({ lastRanAt: new Date() })
-      .where(eq(jobsTable.firmId, firm.id));
+        throw error;
+      }
 
-    return c.json({ message: "Ürünler eşleştirildi", newRowCounts }, 200);
-  });
+      await db
+        .update(jobsTable)
+        .set({ lastRanAt: new Date() })
+        .where(eq(jobsTable.firmId, firm.id));
+
+      return c.json({ message: "Ürünler eşleştirildi", newRowCounts }, 200);
+    },
+  );
 
   app.post(
     "/admin/products/raw",

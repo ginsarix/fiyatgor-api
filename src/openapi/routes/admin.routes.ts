@@ -7,6 +7,7 @@ import {
 	JobBodySchema,
 	JobResponseSchema,
 	MessageSchema,
+	ProductSyncQuerySchema,
 	ProductsQuerySchema,
 	ProductsResponseSchema,
 	RawProductsBodySchema,
@@ -33,8 +34,11 @@ export const syncProductsRoute = createRoute({
 	tags: ['Admin – Products'],
 	summary: 'Sync products from DIA',
 	description:
-		'Triggers a full product synchronisation from the DIA ERP for the authenticated firm. Requires the firm to have DIA connection details configured.',
+		"Triggers a product synchronisation from the DIA ERP for the authenticated firm. mode=full (default) re-fetches the entire active catalog and reconciles deletions; mode=quick fetches only what's changed since the last successful sync and never deletes — it requires at least one prior full sync. Requires the firm to have DIA connection details configured.",
 	security: adminSecurity,
+	request: {
+		query: ProductSyncQuerySchema,
+	},
 	responses: {
 		200: {
 			content: { 'application/json': { schema: SyncResponseSchema } },

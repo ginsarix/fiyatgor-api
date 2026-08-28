@@ -47,6 +47,12 @@ export const firmsTable = pgTable(
       scale: 4,
     }),
 
+    // start time of the last successful product sync (quick or full) — used as the lower bound
+    // ("_date" filter, date granularity only — DIA ignores time-of-day here) for the next quick
+    // sync's delta fetch. Null until a product sync has completed at least once, in which case a
+    // quick sync isn't possible yet and a full sync must run first.
+    lastProductSyncAt: timestamp("last_product_sync_at", { withTimezone: true }),
+
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

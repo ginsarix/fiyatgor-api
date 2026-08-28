@@ -27,7 +27,7 @@ import {
 import { extractDiaMatchKeys } from "./discounts.js";
 import { recomputeFirmProductDiscounts } from "./special-offers.js";
 import { dia } from "../helpers/dia.js";
-import type { DiaListRequest } from "../types/dia-requests.js";
+import type { DiaFilter, DiaListRequest } from "../types/dia-requests.js";
 import type { DiaResponse, DiaStock } from "../types/dia-responses.js";
 import { buildSelectedProductColumns } from "../utils/dia.js";
 
@@ -81,6 +81,10 @@ export async function saveProducts(
   stocks: DiaStock[],
   firmId: number,
   priceField: InferEnum<typeof priceFieldEnum>,
+  // false for a quick/delta sync — the fetched stocks are only a partial (recently-changed)
+  // subset, so treating everything absent from it as deleted would wipe out the rest of the
+  // firm's untouched catalog. Only a full sync (which fetches every active product) may delete.
+  deleteStale = true,
 ) {
   const products: InsertableProduct[] = stocks.map((s) => ({
     firmId,
@@ -216,28 +220,30 @@ export async function saveProducts(
     });
   }
 
-  const fetchedDiaKeys = stocks.map((s) => Number(s._key));
+  if (deleteStale) {
+    const fetchedDiaKeys = stocks.map((s) => Number(s._key));
 
-  if (fetchedDiaKeys.length > 0) {
-    const deleted = await db
-      .delete(productsTable)
-      .where(
-        and(
-          eq(productsTable.firmId, firmId),
-          notInArray(productsTable.diaKey, fetchedDiaKeys),
-        ),
-      )
-      .returning({ id: productsTable.id });
+    if (fetchedDiaKeys.length > 0) {
+      const deleted = await db
+        .delete(productsTable)
+        .where(
+          and(
+            eq(productsTable.firmId, firmId),
+            notInArray(productsTable.diaKey, fetchedDiaKeys),
+          ),
+        )
+        .returning({ id: productsTable.id });
 
-    deletedProductRowsCount = deleted.length;
-  } else {
-    // Nothing came back from DIA — remove all products for this firm
-    const deleted = await db
-      .delete(productsTable)
-      .where(eq(productsTable.firmId, firmId))
-      .returning({ id: productsTable.id });
+      deletedProductRowsCount = deleted.length;
+    } else {
+      // Nothing came back from DIA — remove all products for this firm
+      const deleted = await db
+        .delete(productsTable)
+        .where(eq(productsTable.firmId, firmId))
+        .returning({ id: productsTable.id });
 
-    deletedProductRowsCount = deleted.length;
+      deletedProductRowsCount = deleted.length;
+    }
   }
 
   return {
@@ -375,18 +381,46 @@ export type LoadProductsFirmParam = {
   firmId: number;
   priceField: InferEnum<typeof priceFieldEnum>;
   maxProductNameCharacters: number | null;
+  lastProductSyncAt?: Date | null;
 };
+
+export type ProductSyncMode = "full" | "quick";
+
+/**
+ * Thrown when a quick sync is requested for a firm that has never completed a full sync — a
+ * quick sync's delta filter needs a prior checkpoint to fetch "since", and there's nothing to
+ * fall back to otherwise.
+ */
+export class QuickSyncRequiresFullSyncError extends Error {
+  constructor() {
+    super("Quick sync requires at least one full sync to have completed first");
+  }
+}
+
+// DIA's "_date" filter (last-transaction date) is date-only — it ignores time-of-day — so the
+// next quick sync always re-queries from the *same calendar day* as the last successful sync
+// (not day+1). That reruns that whole day's fetch (small, harmless, idempotent) but guarantees
+// nothing that changed later the same day — before or after that sync ran — falls in a gap.
+function buildDeltaFilter(sinceDate: Date): DiaFilter {
+  return {
+    field: "_date",
+    operator: ">=",
+    value: sinceDate.toISOString().slice(0, 10),
+  };
+}
 
 export async function loadProducts(
   db: DB,
   serverCode: string,
   request: GetProductsRequest,
   firmInfo?: LoadProductsFirmParam,
+  mode: ProductSyncMode = "full",
 ) {
   let finalFirmId = firmInfo?.firmId;
   let finalPriceField = firmInfo?.priceField ?? "fiyat1";
   let finalMaxProductNameCharacters =
     firmInfo?.maxProductNameCharacters ?? null;
+  let finalLastProductSyncAt = firmInfo?.lastProductSyncAt ?? null;
 
   if (!finalFirmId) {
     // get the firm id using serverCode
@@ -395,6 +429,7 @@ export async function loadProducts(
         firmId: firmsTable.id,
         priceField: firmsTable.priceField,
         maxProductNameCharacters: firmsTable.maxProductNameCharacters,
+        lastProductSyncAt: firmsTable.lastProductSyncAt,
       })
       .from(firmsTable)
       .where(eq(firmsTable.diaServerCode, serverCode));
@@ -408,14 +443,26 @@ export async function loadProducts(
     finalFirmId = firm.firmId;
     finalPriceField = firm.priceField;
     finalMaxProductNameCharacters = firm.maxProductNameCharacters;
+    finalLastProductSyncAt = firm.lastProductSyncAt;
   }
+
+  if (mode === "quick" && !finalLastProductSyncAt) {
+    throw new QuickSyncRequiresFullSyncError();
+  }
+
+  // captured before the DIA call (not after) so a slow fetch can't push changes that land
+  // mid-sync past the next quick sync's delta window
+  const syncStartedAt = new Date();
 
   const listele = request.scf_stokkart_detay_listele;
 
   const finalRequest: GetProductsRequest = {
     scf_stokkart_detay_listele: {
       ...listele,
-      filters: [ONLY_ACTIVE_FILTER],
+      filters:
+        mode === "quick"
+          ? [buildDeltaFilter(finalLastProductSyncAt as Date)]
+          : [ONLY_ACTIVE_FILTER],
       params: {
         ...listele.params,
         selectedcolumns: listele.params?.selectedcolumns?.length
@@ -444,7 +491,13 @@ export async function loadProducts(
     finalProducts,
     finalFirmId,
     finalPriceField,
+    mode === "full",
   );
+
+  await db
+    .update(firmsTable)
+    .set({ lastProductSyncAt: syncStartedAt })
+    .where(eq(firmsTable.id, finalFirmId));
 
   // no DIA call here — recomputes from whatever offers are currently persisted, so a firm's
   // product sync and its special-offer sync stay fully independent (see spec)
