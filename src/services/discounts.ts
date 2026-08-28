@@ -170,7 +170,7 @@ export function parseDiaDateTime(date: string, time: string): Date {
 // how much of a DIA WS credit a single scf_kampanya_getir call costs, per DIA's pricing.
 // estimateNextSyncCost's "+1" below covers the scf_kampanya_listele call this same
 // special-offer sync also makes.
-const DIA_CREDIT_COST_PER_FETCH = 0.025;
+const DIA_CREDIT_COST_PER_FETCH = 0.0125;
 
 export function estimateNextSyncCost(discountCount: number): string {
   return (
