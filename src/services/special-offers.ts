@@ -1,4 +1,15 @@
-import { and, asc, count, desc, eq, ilike, isNotNull, notInArray, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  ilike,
+  isNotNull,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { DB } from "../db/index.js";
 import { firmsTable } from "../db/schemas/firms.js";
 import { productsTable } from "../db/schemas/products.js";
@@ -199,44 +210,52 @@ export async function syncSpecialOffers(
     diaFirmCode,
   );
 
-  const existingOffers = await db
-    .select({ diaKey: specialOffersTable.diaKey })
-    .from(specialOffersTable)
-    .where(eq(specialOffersTable.firmId, firmId));
-
-  const existingDiaKeys = new Set(existingOffers.map((o) => o.diaKey));
-
   let addedCount = 0;
   let updatedCount = 0;
 
   for (const offer of offers) {
     const diaKey = Number(offer._key);
+    const startsAt = parseDiaDateTime(offer.bastarih, offer.bassaat);
+    const endsAt = parseDiaDateTime(offer.bittarih, offer.bitsaat);
 
-    await db
+    const [result] = await db
       .insert(specialOffersTable)
       .values({
         firmId,
         diaKey,
         name: offer.aciklama,
         priority: offer.oncelik,
-        startsAt: parseDiaDateTime(offer.bastarih, offer.bassaat),
-        endsAt: parseDiaDateTime(offer.bittarih, offer.bitsaat),
+        startsAt,
+        endsAt,
         diaData: offer,
       })
       .onConflictDoUpdate({
         target: [specialOffersTable.firmId, specialOffersTable.diaKey],
         set: {
-          name: offer.aciklama,
-          priority: offer.oncelik,
-          startsAt: parseDiaDateTime(offer.bastarih, offer.bassaat),
-          endsAt: parseDiaDateTime(offer.bittarih, offer.bitsaat),
-          diaData: offer,
+          name: sql`excluded.name`,
+          priority: sql`excluded.priority`,
+          startsAt: sql`excluded.starts_at`,
+          endsAt: sql`excluded.ends_at`,
+          diaData: sql`excluded.dia_data`,
           updatedAt: new Date(),
         },
-      });
+        // only update if something actually differs, so the returning() below (and the
+        // affected-row count it's based on) reflects real changes — not the plain upsert
+        // Postgres would otherwise report a hit for every existing row every sync.
+        setWhere: sql`
+          special_offers.name IS DISTINCT FROM excluded.name OR
+          special_offers.priority IS DISTINCT FROM excluded.priority OR
+          special_offers.starts_at IS DISTINCT FROM excluded.starts_at OR
+          special_offers.ends_at IS DISTINCT FROM excluded.ends_at OR
+          special_offers.dia_data IS DISTINCT FROM excluded.dia_data
+        `,
+      })
+      .returning({ inserted: sql<boolean>`xmax = 0` });
 
-    if (existingDiaKeys.has(diaKey)) updatedCount++;
-    else addedCount++;
+    if (result) {
+      if (result.inserted) addedCount++;
+      else updatedCount++;
+    }
   }
 
   const fetchedDiaKeys = listedKeys;
