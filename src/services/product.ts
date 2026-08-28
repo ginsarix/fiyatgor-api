@@ -109,6 +109,36 @@ export async function saveProducts(
   let updatedBarcodeRowsCount = 0;
   let deletedProductRowsCount = 0;
 
+  // Deleting stale rows before upserting (rather than after) matters: DIA sometimes re-keys a
+  // product (same stock_code, new dia_key). If the old dia_key row is still around when the new
+  // one is inserted, it collides on firm_stock_code_unique — a constraint the upsert's
+  // onConflictDoUpdate (targeting dia_key only) doesn't cover — and the whole sync throws.
+  if (deleteStale) {
+    const fetchedDiaKeys = stocks.map((s) => Number(s._key));
+
+    if (fetchedDiaKeys.length > 0) {
+      const deleted = await db
+        .delete(productsTable)
+        .where(
+          and(
+            eq(productsTable.firmId, firmId),
+            notInArray(productsTable.diaKey, fetchedDiaKeys),
+          ),
+        )
+        .returning({ id: productsTable.id });
+
+      deletedProductRowsCount = deleted.length;
+    } else {
+      // Nothing came back from DIA — remove all products for this firm
+      const deleted = await db
+        .delete(productsTable)
+        .where(eq(productsTable.firmId, firmId))
+        .returning({ id: productsTable.id });
+
+      deletedProductRowsCount = deleted.length;
+    }
+  }
+
   for (let i = 0; i < products.length; i += chunkSize) {
     const chunk = products.slice(i, i + chunkSize);
 
@@ -218,32 +248,6 @@ export async function saveProducts(
         );
       }
     });
-  }
-
-  if (deleteStale) {
-    const fetchedDiaKeys = stocks.map((s) => Number(s._key));
-
-    if (fetchedDiaKeys.length > 0) {
-      const deleted = await db
-        .delete(productsTable)
-        .where(
-          and(
-            eq(productsTable.firmId, firmId),
-            notInArray(productsTable.diaKey, fetchedDiaKeys),
-          ),
-        )
-        .returning({ id: productsTable.id });
-
-      deletedProductRowsCount = deleted.length;
-    } else {
-      // Nothing came back from DIA — remove all products for this firm
-      const deleted = await db
-        .delete(productsTable)
-        .where(eq(productsTable.firmId, firmId))
-        .returning({ id: productsTable.id });
-
-      deletedProductRowsCount = deleted.length;
-    }
   }
 
   return {

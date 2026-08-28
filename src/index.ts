@@ -14,6 +14,19 @@ import { connectRedis } from "./redis/index.js";
 import { registerRoutes } from "./routes/index.js";
 import { loadJobsFromDB } from "./services/jobs/job-fns.js";
 
+// Last-resort safety net: a bug in a background job (cron sync, etc.) must never take the
+// whole API down. Request-time errors are handled by Hono's onError below; this only catches
+// things that slip past that — e.g. a missed .catch() on a fire-and-forget cron callback.
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled rejection: ", reason);
+  Sentry.captureException(reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught exception: ", err);
+  Sentry.captureException(err);
+});
+
 const app = new Hono().onError((err, c) => {
   if (err instanceof HTTPException) {
     return err.getResponse(); // Don't report expected HTTP errors

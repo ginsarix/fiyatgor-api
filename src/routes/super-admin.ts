@@ -237,7 +237,7 @@ export function registerSuperAdminRoutes(app: Hono) {
                 priceField: createdFirm.priceField,
                 maxProductNameCharacters: createdFirm.maxProductNameCharacters,
               },
-            ),
+            ).catch((err) => console.error("Job failed: ", err)),
         );
       }
 
