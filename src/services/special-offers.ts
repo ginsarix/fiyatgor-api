@@ -13,6 +13,30 @@ import {
 } from "./discounts.js";
 
 /**
+ * Whether this firm has run at least one product sync since `diaMatchKeys` shipped. Used both
+ * to gate the (costly, per-offer DIA-queried) special-offer sync up front, and as a signal for
+ * `recomputeFirmProductDiscounts` — the `diaMatchKeys IS NOT NULL` filter there is what actually
+ * protects correctness regardless of this value.
+ */
+export async function hasFirmSyncedProducts(
+  db: DB,
+  firmId: number,
+): Promise<boolean> {
+  const [syncedProduct] = await db
+    .select({ id: productsTable.id })
+    .from(productsTable)
+    .where(
+      and(
+        eq(productsTable.firmId, firmId),
+        isNotNull(productsTable.diaMatchKeys),
+      ),
+    )
+    .limit(1);
+
+  return !!syncedProduct;
+}
+
+/**
  * Recomputes and persists discount fields for a firm's products, from currently-stored
  * special offers — no DIA call. Called after a product sync, after a special-offer sync, and
  * after a single offer's enabled toggle, so a toggle takes effect immediately. Every product
@@ -32,21 +56,7 @@ export async function recomputeFirmProductDiscounts(
   db: DB,
   firmId: number,
 ): Promise<{ discountedProductCount: number; hasSyncedProducts: boolean }> {
-  // has this firm run at least one product sync since diaMatchKeys shipped? Purely a signal
-  // for the UI (see spec's "Rollout safety") — the diaMatchKeys IS NOT NULL filter below is
-  // what actually protects correctness regardless of this value.
-  const [syncedProduct] = await db
-    .select({ id: productsTable.id })
-    .from(productsTable)
-    .where(
-      and(
-        eq(productsTable.firmId, firmId),
-        isNotNull(productsTable.diaMatchKeys),
-      ),
-    )
-    .limit(1);
-
-  const hasSyncedProducts = !!syncedProduct;
+  const hasSyncedProducts = await hasFirmSyncedProducts(db, firmId);
 
   const [firm] = await db
     .select({ discountsEnabled: firmsTable.discountsEnabled })

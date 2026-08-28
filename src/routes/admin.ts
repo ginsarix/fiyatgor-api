@@ -32,6 +32,7 @@ import {
 import {
   getSpecialOffers,
   getSpecialOffersCount,
+  hasFirmSyncedProducts,
   setSpecialOfferEnabled,
   syncSpecialOffers,
   type GetSpecialOffersOptions,
@@ -441,6 +442,16 @@ export function registerAdminRoutes(app: Hono) {
     if (!serverCode || !diaFirmCode) {
       return c.json(
         { message: "DIA bağlantı bilgisi olmadan kampanya eşleştiremezsiniz" },
+        400,
+      );
+    }
+
+    if (!(await hasFirmSyncedProducts(db, firm.id))) {
+      return c.json(
+        {
+          message:
+            "Lütfen kampanyaları eşleştirmeden önce bu seferlik 1 kez ürünleri eşleştirin. Bunu bir daha yapmanıza gerek olmayacaktır.",
+        },
         400,
       );
     }
