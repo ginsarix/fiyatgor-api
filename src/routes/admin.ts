@@ -8,12 +8,17 @@ import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
 import { DatabaseError } from "pg";
 import { z } from "zod";
+import { env } from "../config/env.js";
 import { firmsConstraintErrors } from "../constants/messages.js";
 import { db } from "../db/index.js";
 import { catalogsTable } from "../db/schemas/catalogs.js";
 import { firmsTable, type SelectableFirm } from "../db/schemas/firms.js";
 import { jobsTable } from "../db/schemas/jobs.js";
 import { usersTable } from "../db/schemas/users.js";
+import {
+  consumeProductSyncStatus,
+  setProductSyncStatus,
+} from "../helpers/redis.js";
 import { adminAuth, firmAuth } from "../middlewares/auth.js";
 import { getFirmById } from "../services/firm.js";
 import { runProductSyncJob } from "../services/jobs/job-fns.js";
@@ -75,9 +80,8 @@ export function registerAdminRoutes(app: Hono) {
         );
       }
 
-      let newRowCounts: Awaited<ReturnType<typeof loadProducts>>;
-      try {
-        newRowCounts = await loadProducts(
+      const runSync = () =>
+        loadProducts(
           db,
           serverCode,
           {
@@ -91,6 +95,51 @@ export function registerAdminRoutes(app: Hono) {
           },
           mode,
         );
+
+      // full syncs can take a long time on large catalogs — run them in the background so the
+      // admin doesn't have to keep the request open, and let the client poll for completion
+      if (mode === "full") {
+        const existingStatus = await consumeProductSyncStatus(firm.id);
+        if (existingStatus?.status === "running") {
+          return c.json({ message: "Tam eşleştirme zaten çalışıyor" }, 409);
+        }
+
+        await setProductSyncStatus(firm.id, { status: "running" });
+
+        // demo firms have too few products for a full sync to stay "running" long enough to
+        // actually exercise the background flow — pad it out in dev only
+        const devDelay =
+          env.NODE_ENV === "development"
+            ? new Promise((resolve) => setTimeout(resolve, 10_000))
+            : Promise.resolve();
+
+        devDelay
+          .then(runSync)
+          .then(async (newRowCounts) => {
+            await db
+              .update(jobsTable)
+              .set({ lastRanAt: new Date() })
+              .where(eq(jobsTable.firmId, firm.id));
+
+            await setProductSyncStatus(firm.id, {
+              status: "done",
+              newRowCounts,
+            });
+          })
+          .catch(async (error) => {
+            console.error("Full product sync failed: ", error);
+            await setProductSyncStatus(firm.id, {
+              status: "error",
+              message: "Ürünler eşleştirilirken bir hata oluştu",
+            });
+          });
+
+        return c.json({ message: "Tam eşleştirme arka planda başlatıldı" }, 202);
+      }
+
+      let newRowCounts: Awaited<ReturnType<typeof loadProducts>>;
+      try {
+        newRowCounts = await runSync();
       } catch (error) {
         if (error instanceof QuickSyncRequiresFullSyncError) {
           return c.json(
@@ -113,6 +162,14 @@ export function registerAdminRoutes(app: Hono) {
       return c.json({ message: "Ürünler eşleştirildi", newRowCounts }, 200);
     },
   );
+
+  app.get("/admin/products/sync/status", adminAuth, firmAuth, async (c) => {
+    const firm = c.get("firm");
+
+    const status = await consumeProductSyncStatus(firm.id);
+
+    return c.json({ status: status ?? { status: "idle" } }, 200);
+  });
 
   app.post(
     "/admin/products/raw",

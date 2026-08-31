@@ -8,6 +8,7 @@ import {
 	JobResponseSchema,
 	MessageSchema,
 	ProductSyncQuerySchema,
+	ProductSyncStatusResponseSchema,
 	ProductsQuerySchema,
 	ProductsResponseSchema,
 	RawProductsBodySchema,
@@ -17,6 +18,7 @@ import {
 	SpecialOffersResponseSchema,
 	SpecialOfferIdParamSchema,
 	SyncResponseSchema,
+	SyncStartedResponseSchema,
 	UpdatedFirmResponseSchema,
 	UpdatedJobResponseSchema,
 	UpdateFirmBodySchema,
@@ -34,7 +36,7 @@ export const syncProductsRoute = createRoute({
 	tags: ['Admin – Products'],
 	summary: 'Sync products from DIA',
 	description:
-		"Triggers a product synchronisation from the DIA ERP for the authenticated firm. mode=full (default) re-fetches the entire active catalog and reconciles deletions; mode=quick fetches only what's changed since the last successful sync and never deletes — it requires at least one prior full sync. Requires the firm to have DIA connection details configured.",
+		"Triggers a product synchronisation from the DIA ERP for the authenticated firm. mode=quick fetches only what's changed since the last successful sync and never deletes — it requires at least one prior full sync — and completes synchronously. mode=full (default) re-fetches the entire active catalog and reconciles deletions; because this can take a long time on large catalogs, it runs in the background and this call returns as soon as it's started — poll GET /admin/products/sync/status for the result. Requires the firm to have DIA connection details configured.",
 	security: adminSecurity,
 	request: {
 		query: ProductSyncQuerySchema,
@@ -42,11 +44,45 @@ export const syncProductsRoute = createRoute({
 	responses: {
 		200: {
 			content: { 'application/json': { schema: SyncResponseSchema } },
-			description: 'Sync completed successfully',
+			description: 'mode=quick sync completed synchronously',
+		},
+		202: {
+			content: { 'application/json': { schema: SyncStartedResponseSchema } },
+			description: 'mode=full sync started in the background',
 		},
 		400: {
 			content: { 'application/json': { schema: MessageSchema } },
 			description: 'Firm has no DIA connection details configured',
+		},
+		401: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Not authenticated',
+		},
+		403: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'Firm access denied',
+		},
+		409: {
+			content: { 'application/json': { schema: MessageSchema } },
+			description: 'A full sync is already running for this firm',
+		},
+	},
+});
+
+export const getProductSyncStatusRoute = createRoute({
+	method: 'get',
+	path: '/admin/products/sync/status',
+	tags: ['Admin – Products'],
+	summary: 'Get background full-sync status',
+	description:
+		"Returns the current status of the authenticated firm's background full product sync (see POST /admin/products/sync). Reading a terminal status (`done`/`error`) consumes it — a subsequent call returns `idle` — so a completed sync is only reported once.",
+	security: adminSecurity,
+	responses: {
+		200: {
+			content: {
+				'application/json': { schema: ProductSyncStatusResponseSchema },
+			},
+			description: 'Current sync status',
 		},
 		401: {
 			content: { 'application/json': { schema: MessageSchema } },

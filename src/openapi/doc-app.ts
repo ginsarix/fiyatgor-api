@@ -6,6 +6,7 @@ import {
   getAdminProductsRoute,
   getJobRoute,
   getMeRoute,
+  getProductSyncStatusRoute,
   getSpecialOffersRoute,
   saveRawProductsRoute,
   syncProductsRoute,
@@ -59,6 +60,7 @@ docApp.openapi(getProductByFirmCodeBarcodeRoute, stub);
 
 // ─── Admin – Products ─────────────────────────────────────────────────────────
 docApp.openapi(syncProductsRoute, stub);
+docApp.openapi(getProductSyncStatusRoute, stub);
 docApp.openapi(saveRawProductsRoute, stub);
 docApp.openapi(getAdminProductsRoute, stub);
 

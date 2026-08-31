@@ -283,6 +283,26 @@ export const SyncResponseSchema = z
   })
   .openapi("SyncResponse");
 
+export const SyncStartedResponseSchema = z
+  .object({
+    message: z.string(),
+  })
+  .openapi("SyncStartedResponse");
+
+export const ProductSyncStatusResponseSchema = z
+  .object({
+    status: z.discriminatedUnion("status", [
+      z.object({ status: z.literal("idle") }),
+      z.object({ status: z.literal("running") }),
+      z.object({
+        status: z.literal("done"),
+        newRowCounts: SyncRowCountsSchema,
+      }),
+      z.object({ status: z.literal("error"), message: z.string() }),
+    ]),
+  })
+  .openapi("ProductSyncStatusResponse");
+
 // ─── Special Offers ──────────────────────────────────────────────────────────
 
 export const SpecialOfferSchema = z

@@ -1,15 +1,26 @@
 import crypto, { type UUID } from "node:crypto";
 import {
   diaSessionExpiration,
+  productSyncStatusExpiration,
   sessionExpiration,
 } from "../constants/redis/expirations.js";
 import {
   diaSessionKey,
+  productSyncStatusKey,
   sessionKey,
   userSessionKey,
 } from "../constants/redis/keys.js";
 import { redis } from "../redis/index.js";
 import type { Session } from "../types/session.js";
+import type { loadProducts } from "../services/product.js";
+
+export type ProductSyncStatus =
+  | { status: "running" }
+  | {
+      status: "done";
+      newRowCounts: Awaited<ReturnType<typeof loadProducts>>;
+    }
+  | { status: "error"; message: string };
 
 export async function setDiaSession(firmId: number, sessionId: string) {
   return await redis.set(`${diaSessionKey}:${firmId}`, sessionId, {
@@ -80,6 +91,38 @@ export async function getUserSession(userId: string | number) {
   const redisKey = `${userSessionKey}:${userId}`;
 
   return await redis.get(redisKey);
+}
+
+export async function setProductSyncStatus(
+  firmId: number,
+  status: ProductSyncStatus,
+) {
+  return await redis.set(
+    `${productSyncStatusKey}:${firmId}`,
+    JSON.stringify(status),
+    { expiration: { type: "EX", value: productSyncStatusExpiration } },
+  );
+}
+
+/**
+ * Deletes the status once it's read if it's a terminal state ("done"/"error"), so a stale
+ * result doesn't reappear the next time it's polled (e.g. after a page reload).
+ */
+export async function consumeProductSyncStatus(
+  firmId: number,
+): Promise<ProductSyncStatus | null> {
+  const redisKey = `${productSyncStatusKey}:${firmId}`;
+  const raw = await redis.get(redisKey);
+
+  if (!raw) return null;
+
+  const status = JSON.parse(raw) as ProductSyncStatus;
+
+  if (status.status !== "running") {
+    await redis.del(redisKey);
+  }
+
+  return status;
 }
 
 /**
