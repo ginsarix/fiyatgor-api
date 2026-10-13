@@ -648,9 +648,25 @@ export async function saveRawProducts(
       insertedProductRowsCount += insertedCount;
       updatedProductRowsCount += updatedCount;
 
+      // the setWhere above leaves unchanged products out of upsertedProducts, but their barcodes
+      // can still have changed in the input, so barcodes have to be synced against every product
+      // in the chunk, not just the changed ones
+      const chunkProducts = await tx
+        .select({ id: productsTable.id, stockCode: productsTable.stockCode })
+        .from(productsTable)
+        .where(
+          and(
+            eq(productsTable.firmId, firmId),
+            inArray(
+              productsTable.stockCode,
+              chunk.map((p) => p.stockCode),
+            ),
+          ),
+        );
+
       const barcodesWithRelation = extractRawBarcodesWithRelation(
         rawChunk,
-        upsertedProducts,
+        chunkProducts,
         firmId,
       );
 
@@ -663,6 +679,8 @@ export async function saveRawProducts(
             set: {
               productId: sql`excluded.product_id`, // update ownership if barcode moved to different product
             },
+            // only update if moved to a different product to get a correct affected row count
+            setWhere: sql`barcodes.product_id IS DISTINCT FROM excluded.product_id`,
           })
           .returning({
             barcode: barcodesTable.barcode,
@@ -673,7 +691,7 @@ export async function saveRawProducts(
           and(
             inArray(
               barcodesTable.productId,
-              upsertedProducts.map((p) => p.id),
+              chunkProducts.map((p) => p.id),
             ),
             notInArray(
               barcodesTable.barcode,
@@ -691,7 +709,7 @@ export async function saveRawProducts(
         await tx.delete(barcodesTable).where(
           inArray(
             barcodesTable.productId,
-            upsertedProducts.map((p) => p.id),
+            chunkProducts.map((p) => p.id),
           ),
         );
       }
