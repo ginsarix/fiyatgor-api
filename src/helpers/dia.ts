@@ -15,6 +15,7 @@ import type {
 } from "../types/dia-responses.js";
 import { aesDecrypt } from "../utils/aes-256-gcm.js";
 import { getDiaSession, setDiaSession } from "./redis.js";
+import { env } from "../config/env.js";
 
 export const createDiaUrl = (serverCode: string, module: string) =>
   `https://${serverCode}.${URL_BASE}/${module}/json`;
@@ -126,6 +127,8 @@ export async function dia<
 
   try {
     const response = await axios.post<TResponse>(requestUrl, finalRequest);
+
+    if (env.NODE_ENV === 'development') console.debug(response.data);
 
     return response.data;
   } catch (error) {
