@@ -201,9 +201,25 @@ export async function saveProducts(
       insertedProductRowsCount += insertedCount;
       updatedProductRowsCount += updatedCount;
 
+      // the setWhere above leaves unchanged products out of upsertedProducts, but their barcodes
+      // can still have changed in DIA (e.g. a barcode added to an otherwise untouched stock card),
+      // so barcodes have to be synced against every product in the chunk, not just the changed ones
+      const chunkProducts = await tx
+        .select({ id: productsTable.id, diaKey: productsTable.diaKey })
+        .from(productsTable)
+        .where(
+          and(
+            eq(productsTable.firmId, firmId),
+            inArray(
+              productsTable.diaKey,
+              chunk.map((p) => p.diaKey as number),
+            ),
+          ),
+        );
+
       const barcodesWithRelation = extractBarcodesWithRelation(
         stocks,
-        upsertedProducts,
+        chunkProducts,
       );
 
       if (barcodesWithRelation.length) {
@@ -215,6 +231,8 @@ export async function saveProducts(
             set: {
               productId: sql`excluded.product_id`,
             },
+            // only update if moved to a different product to get a correct affected row count
+            setWhere: sql`barcodes.product_id IS DISTINCT FROM excluded.product_id`,
           })
           .returning({
             barcode: barcodesTable.barcode,
@@ -225,7 +243,7 @@ export async function saveProducts(
           and(
             inArray(
               barcodesTable.productId,
-              upsertedProducts.map((p) => p.id),
+              chunkProducts.map((p) => p.id),
             ),
             notInArray(
               barcodesTable.barcode,
@@ -243,7 +261,7 @@ export async function saveProducts(
         await tx.delete(barcodesTable).where(
           inArray(
             barcodesTable.productId,
-            upsertedProducts.map((p) => p.id),
+            chunkProducts.map((p) => p.id),
           ),
         );
       }
