@@ -36,6 +36,7 @@ type ProductIdAndDiaKey = Pick<SelectableProduct, "id" | "diaKey">;
 function extractBarcodesWithRelation(
   stocks: DiaStock[],
   savedProducts: ProductIdAndDiaKey[],
+  firmId: number,
 ) {
   // lookup map (diaKey -> productId)
   const productMap = new Map<number, number>(
@@ -65,6 +66,7 @@ function extractBarcodesWithRelation(
         if (!barkod?.barkod) continue;
 
         results.push({
+          firmId,
           productId,
           diaKey,
           barcode: barkod.barkod,
@@ -220,6 +222,7 @@ export async function saveProducts(
       const barcodesWithRelation = extractBarcodesWithRelation(
         stocks,
         chunkProducts,
+        firmId,
       );
 
       if (barcodesWithRelation.length) {
@@ -227,7 +230,7 @@ export async function saveProducts(
           .insert(barcodesTable)
           .values(barcodesWithRelation)
           .onConflictDoUpdate({
-            target: barcodesTable.barcode,
+            target: [barcodesTable.firmId, barcodesTable.barcode],
             set: {
               productId: sql`excluded.product_id`,
             },
@@ -546,6 +549,7 @@ type ProductIdAndStockCode = Pick<SelectableProduct, "id" | "stockCode">;
 function extractRawBarcodesWithRelation(
   rawProducts: RawProductInput[],
   savedProducts: ProductIdAndStockCode[],
+  firmId: number,
 ) {
   // lookup map (stockCode -> productId)
   const productMap = new Map<string, number>(
@@ -563,6 +567,7 @@ function extractRawBarcodesWithRelation(
     for (const barcode of raw.barcodes) {
       if (!barcode) continue;
       results.push({
+        firmId,
         productId,
         barcode,
       });
@@ -646,6 +651,7 @@ export async function saveRawProducts(
       const barcodesWithRelation = extractRawBarcodesWithRelation(
         rawChunk,
         upsertedProducts,
+        firmId,
       );
 
       if (barcodesWithRelation.length) {
@@ -653,7 +659,7 @@ export async function saveRawProducts(
           .insert(barcodesTable)
           .values(barcodesWithRelation)
           .onConflictDoUpdate({
-            target: barcodesTable.barcode,
+            target: [barcodesTable.firmId, barcodesTable.barcode],
             set: {
               productId: sql`excluded.product_id`, // update ownership if barcode moved to different product
             },
