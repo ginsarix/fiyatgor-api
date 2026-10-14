@@ -3,3 +3,10 @@ export const firmsConstraintErrors = {
   firms_firm_code_unique:
     "Bu firma kodu (tanımlayıcı) ile başka bir firma zaten var",
 };
+
+export const diaLoginErrors = {
+  rejected:
+    "DIA girişi başarısız oldu, DIA kullanıcı adı, şifre ve API anahtarını kontrol edin",
+  missingCredentials:
+    "DIA bağlantı bilgileri eksik, DIA kullanıcı adı, şifre ve API anahtarını girin",
+};
