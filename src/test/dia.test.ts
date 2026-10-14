@@ -1,6 +1,10 @@
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DiaLoginError, diaLogin } from "../helpers/dia.js";
+import {
+  DiaLoginError,
+  diaLogin,
+  verifyDiaCredentials,
+} from "../helpers/dia.js";
 
 const credentials = { username: "user", password: "pass", apiKey: "" };
 
@@ -49,6 +53,43 @@ describe("diaLogin", () => {
           params: { apikey: "" },
         },
       },
+    );
+  });
+});
+
+describe("verifyDiaCredentials", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("hands back the new session when DIA accepts the credentials", async () => {
+    vi.spyOn(axios, "post").mockResolvedValue({
+      data: { code: "200", msg: "f3a9c1d2e4b5" },
+    });
+
+    await expect(verifyDiaCredentials("diademo", credentials)).resolves.toEqual(
+      { status: "ok", sessionId: "f3a9c1d2e4b5" },
+    );
+  });
+
+  it("throws a DiaLoginError when DIA rejects the credentials", async () => {
+    vi.spyOn(axios, "post").mockResolvedValue({
+      data: { code: "401", msg: "NOUSER" },
+    });
+
+    await expect(
+      verifyDiaCredentials("diademo", credentials),
+    ).rejects.toBeInstanceOf(DiaLoginError);
+  });
+
+  // an outage on DIA's side shouldn't stop the user from saving their settings
+  it("reports DIA as unreachable when the request itself fails", async () => {
+    vi.spyOn(axios, "post").mockRejectedValue(
+      new AxiosError("connect ETIMEDOUT", "ETIMEDOUT"),
+    );
+
+    await expect(verifyDiaCredentials("diademo", credentials)).resolves.toEqual(
+      { status: "unreachable" },
     );
   });
 });

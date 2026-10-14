@@ -10,3 +10,7 @@ export const diaLoginErrors = {
   missingCredentials:
     "DIA bağlantı bilgileri eksik, DIA kullanıcı adı, şifre ve API anahtarını girin",
 };
+
+// shown when the settings were saved but DIA couldn't be reached to check the credentials
+export const diaUnreachableWarning =
+  "DIA'ya ulaşılamadığı için DIA giriş bilgileri doğrulanamadı";

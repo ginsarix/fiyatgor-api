@@ -9,18 +9,28 @@ import { HTTPException } from "hono/http-exception";
 import { DatabaseError } from "pg";
 import { z } from "zod";
 import { env } from "../config/env.js";
-import { firmsConstraintErrors } from "../constants/messages.js";
+import {
+  diaUnreachableWarning,
+  firmsConstraintErrors,
+} from "../constants/messages.js";
 import { db } from "../db/index.js";
 import { catalogsTable } from "../db/schemas/catalogs.js";
 import { firmsTable, type SelectableFirm } from "../db/schemas/firms.js";
 import { jobsTable } from "../db/schemas/jobs.js";
 import { usersTable } from "../db/schemas/users.js";
+import { verifyDiaCredentials } from "../helpers/dia.js";
 import {
   consumeProductSyncStatus,
+  deleteDiaSession,
+  setDiaSession,
   setProductSyncStatus,
 } from "../helpers/redis.js";
 import { adminAuth, firmAuth } from "../middlewares/auth.js";
-import { getFirmById, withEncryptedDiaPassword } from "../services/firm.js";
+import {
+  getFirmById,
+  pendingDiaCredentials,
+  withEncryptedDiaPassword,
+} from "../services/firm.js";
 import { runProductSyncJob } from "../services/jobs/job-fns.js";
 import { createJob, deleteJob } from "../services/jobs/scheduler.js";
 import type {
@@ -400,9 +410,19 @@ export function registerAdminRoutes(app: Hono) {
     firmAuth,
     zValidator("json", firmFormValidation.partial()),
     async (c) => {
-      const { id: firmId } = c.get("firm");
+      const firm = c.get("firm");
+      const firmId = firm.id;
 
       const formInput = c.req.valid("json");
+
+      // throws a DiaLoginError (422) before anything is saved if DIA rejects the new credentials
+      const pendingCredentials = pendingDiaCredentials(firm, formInput);
+      const verification =
+        pendingCredentials &&
+        (await verifyDiaCredentials(
+          pendingCredentials.serverCode,
+          pendingCredentials.credentials,
+        ));
 
       let updatedFirm: SelectableFirm;
 
@@ -435,10 +455,20 @@ export function registerAdminRoutes(app: Hono) {
         throw error;
       }
 
+      // the cached session belongs to the old credentials
+      if (verification?.status === "ok")
+        await setDiaSession(firmId, verification.sessionId);
+      else if (verification?.status === "unreachable")
+        await deleteDiaSession(firmId);
+
       return c.json(
         {
           message: "Firmanız güncellendi",
           updatedFirm: { ...updatedFirm, diaPassword: undefined },
+          warning:
+            verification?.status === "unreachable"
+              ? diaUnreachableWarning
+              : undefined,
         },
         200,
       );

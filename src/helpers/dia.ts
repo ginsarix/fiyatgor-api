@@ -76,6 +76,28 @@ export async function diaLogin(
   return data.msg;
 }
 
+/**
+ * Tries the credentials before they are saved
+ * @throws {DiaLoginError} if DIA rejects the credentials
+ */
+export async function verifyDiaCredentials(
+  serverCode: string,
+  credentials: DiaCredentials,
+): Promise<{ status: "ok"; sessionId: string } | { status: "unreachable" }> {
+  try {
+    return { status: "ok", sessionId: await diaLogin(serverCode, credentials) };
+  } catch (error) {
+    if (isAxiosError(error)) {
+      console.log(
+        `Couldn't reach DIA to verify ${serverCode}: ${error.message}`,
+      );
+      return { status: "unreachable" };
+    }
+
+    throw error;
+  }
+}
+
 type LoginResult = "login" | "successful-ping";
 async function login(
   db: DB,
