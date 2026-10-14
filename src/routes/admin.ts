@@ -32,6 +32,7 @@ import {
   getProducts,
   getProductsCount,
   loadProducts,
+  productSyncErrorMessage,
   QuickSyncRequiresFullSyncError,
   saveRawProducts,
 } from "../services/product.js";
@@ -129,7 +130,7 @@ export function registerAdminRoutes(app: Hono) {
             console.error("Full product sync failed: ", error);
             await setProductSyncStatus(firm.id, {
               status: "error",
-              message: "Ürünler eşleştirilirken bir hata oluştu",
+              message: productSyncErrorMessage(error),
             });
           });
 

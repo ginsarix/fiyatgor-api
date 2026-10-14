@@ -26,7 +26,7 @@ import {
 } from "../db/schemas/products.js";
 import { extractDiaMatchKeys } from "./discounts.js";
 import { recomputeFirmProductDiscounts } from "./special-offers.js";
-import { dia } from "../helpers/dia.js";
+import { DiaLoginError, dia } from "../helpers/dia.js";
 import type { DiaFilter, DiaListRequest } from "../types/dia-requests.js";
 import type { DiaResponse, DiaStock } from "../types/dia-responses.js";
 import { buildSelectedProductColumns } from "../utils/dia.js";
@@ -420,6 +420,13 @@ export class QuickSyncRequiresFullSyncError extends Error {
   constructor() {
     super("Quick sync requires at least one full sync to have completed first");
   }
+}
+
+// background syncs can't answer the request, so this is what ends up in the sync status
+export function productSyncErrorMessage(error: unknown) {
+  if (error instanceof DiaLoginError) return error.message;
+
+  return "Ürünler eşleştirilirken bir hata oluştu";
 }
 
 // DIA's "_date" filter (last-transaction date) is date-only — it ignores time-of-day — so the
