@@ -20,7 +20,7 @@ import {
   setProductSyncStatus,
 } from "../helpers/redis.js";
 import { adminAuth, firmAuth } from "../middlewares/auth.js";
-import { getFirmById } from "../services/firm.js";
+import { getFirmById, withEncryptedDiaPassword } from "../services/firm.js";
 import { runProductSyncJob } from "../services/jobs/job-fns.js";
 import { createJob, deleteJob } from "../services/jobs/scheduler.js";
 import type {
@@ -45,7 +45,6 @@ import {
   type SortOrder as SpecialOfferSortOrder,
   type SpecialOfferSortBy,
 } from "../services/special-offers.js";
-import { aesEncrypt } from "../utils/aes-256-gcm.js";
 import { toCronExpression } from "../utils/cron.js";
 import { createFile, getFilePath } from "../utils/file.js";
 import { hash } from "../utils/sha256.js";
@@ -410,9 +409,7 @@ export function registerAdminRoutes(app: Hono) {
         [updatedFirm] = await db
           .update(firmsTable)
           .set({
-            ...formInput,
-            diaPassword:
-              formInput.diaPassword && aesEncrypt(formInput.diaPassword),
+            ...withEncryptedDiaPassword(formInput),
             diaApiKey: formInput.diaApiKey ?? "",
           })
           .where(eq(firmsTable.id, firmId))
