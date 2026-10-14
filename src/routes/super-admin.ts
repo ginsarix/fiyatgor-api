@@ -10,6 +10,7 @@ import { db } from "../db/index.js";
 import { firmsTable, type SelectableFirm } from "../db/schemas/firms.js";
 import { jobsTable } from "../db/schemas/jobs.js";
 import { usersTable } from "../db/schemas/users.js";
+import { withEncryptedDiaPassword } from "../services/firm.js";
 import { runProductSyncJob } from "../services/jobs/job-fns.js";
 import { createJob } from "../services/jobs/scheduler.js";
 import { aesEncrypt } from "../utils/aes-256-gcm.js";
@@ -131,7 +132,10 @@ export function registerSuperAdminRoutes(app: Hono) {
 
       const [updatedFirm] = await db
         .update(firmsTable)
-        .set({ ...input, diaApiKey: input.diaApiKey ?? "" })
+        .set({
+          ...withEncryptedDiaPassword(input),
+          diaApiKey: input.diaApiKey ?? "",
+        })
         .where(eq(firmsTable.id, Number(id)))
         .returning();
 
