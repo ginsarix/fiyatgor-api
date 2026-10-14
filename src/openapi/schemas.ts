@@ -122,6 +122,13 @@ export const CreatedFirmResponseSchema = z
   .object({
     message: z.string(),
     createdFirm: FirmFullSchema,
+    warning: z
+      .string()
+      .optional()
+      .openapi({
+        description:
+          "Set when DIA couldn't be reached to verify the DIA credentials",
+      }),
   })
   .openapi("CreatedFirmResponse");
 
@@ -129,6 +136,13 @@ export const UpdatedFirmResponseSchema = z
   .object({
     message: z.string(),
     updatedFirm: FirmFullSchema,
+    warning: z
+      .string()
+      .optional()
+      .openapi({
+        description:
+          "Set when the DIA credentials changed but DIA couldn't be reached to verify them",
+      }),
   })
   .openapi("UpdatedFirmResponse");
 

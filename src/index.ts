@@ -4,11 +4,11 @@ import { swaggerUI } from "@hono/swagger-ui";
 import * as Sentry from "@sentry/node";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { HTTPException } from "hono/http-exception";
 import { logger } from "hono/logger";
 import { env } from "./config/env.js";
 import { db } from "./db/index.js";
 import { superAdminAuth } from "./middlewares/auth.js";
+import { errorHandler } from "./middlewares/error-handler.js";
 import { docApp } from "./openapi/doc-app.js";
 import { connectRedis } from "./redis/index.js";
 import { registerRoutes } from "./routes/index.js";
@@ -27,21 +27,7 @@ process.on("uncaughtException", (err) => {
   Sentry.captureException(err);
 });
 
-const app = new Hono().onError((err, c) => {
-  if (err instanceof HTTPException) {
-    return err.getResponse(); // Don't report expected HTTP errors
-  }
-
-  console.error(err);
-  const eventId = Sentry.captureException(err, {
-    extra: {
-      method: c.req.method,
-      path: c.req.path,
-    },
-  }); // Only report true unknowns
-
-  return c.json({ error: "Internal server error", requestId: eventId }, 500);
-});
+const app = new Hono().onError(errorHandler);
 
 app.use(logger());
 

@@ -10,7 +10,11 @@ import { db } from "../db/index.js";
 import { firmsTable, type SelectableFirm } from "../db/schemas/firms.js";
 import { jobsTable } from "../db/schemas/jobs.js";
 import { usersTable } from "../db/schemas/users.js";
-import { withEncryptedDiaPassword } from "../services/firm.js";
+import {
+  applyFirmDiaCredentialsVerification,
+  verifyFirmDiaCredentials,
+  withEncryptedDiaPassword,
+} from "../services/firm.js";
 import { runProductSyncJob } from "../services/jobs/job-fns.js";
 import { createJob } from "../services/jobs/scheduler.js";
 import { aesEncrypt } from "../utils/aes-256-gcm.js";
@@ -130,6 +134,9 @@ export function registerSuperAdminRoutes(app: Hono) {
 
       if (!firm) return c.json({ message: "Firma bulunamadı" }, 404);
 
+      // throws a DiaLoginError (422) before anything is saved if DIA rejects the new credentials
+      const verification = await verifyFirmDiaCredentials(firm, input);
+
       const [updatedFirm] = await db
         .update(firmsTable)
         .set({
@@ -139,10 +146,16 @@ export function registerSuperAdminRoutes(app: Hono) {
         .where(eq(firmsTable.id, Number(id)))
         .returning();
 
+      const warning = await applyFirmDiaCredentialsVerification(
+        updatedFirm.id,
+        verification,
+      );
+
       return c.json(
         {
           message: "Firma başarıyla güncellendi",
           updatedFirm: { ...updatedFirm, diaPassword: undefined },
+          warning,
         },
         200,
       );
@@ -185,6 +198,9 @@ export function registerSuperAdminRoutes(app: Hono) {
     ),
     async (c) => {
       const input = c.req.valid("json");
+
+      // throws a DiaLoginError (422) before anything is saved if DIA rejects the credentials
+      const verification = await verifyFirmDiaCredentials(null, input.firm);
 
       let createdFirm: SelectableFirm;
 
@@ -245,9 +261,14 @@ export function registerSuperAdminRoutes(app: Hono) {
         );
       }
 
+      const warning = await applyFirmDiaCredentialsVerification(
+        createdFirm.id,
+        verification,
+      );
+
       c.header("Location", `/superadmin/firm/${createdFirm.id}`);
       return c.json(
-        { message: "Firma başarıyla oluşturuldu", createdFirm },
+        { message: "Firma başarıyla oluşturuldu", createdFirm, warning },
         201,
       );
     },

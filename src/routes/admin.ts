@@ -20,7 +20,12 @@ import {
   setProductSyncStatus,
 } from "../helpers/redis.js";
 import { adminAuth, firmAuth } from "../middlewares/auth.js";
-import { getFirmById, withEncryptedDiaPassword } from "../services/firm.js";
+import {
+  applyFirmDiaCredentialsVerification,
+  getFirmById,
+  verifyFirmDiaCredentials,
+  withEncryptedDiaPassword,
+} from "../services/firm.js";
 import { runProductSyncJob } from "../services/jobs/job-fns.js";
 import { createJob, deleteJob } from "../services/jobs/scheduler.js";
 import type {
@@ -32,6 +37,7 @@ import {
   getProducts,
   getProductsCount,
   loadProducts,
+  productSyncErrorMessage,
   QuickSyncRequiresFullSyncError,
   saveRawProducts,
 } from "../services/product.js";
@@ -129,7 +135,7 @@ export function registerAdminRoutes(app: Hono) {
             console.error("Full product sync failed: ", error);
             await setProductSyncStatus(firm.id, {
               status: "error",
-              message: "Ürünler eşleştirilirken bir hata oluştu",
+              message: productSyncErrorMessage(error),
             });
           });
 
@@ -399,9 +405,13 @@ export function registerAdminRoutes(app: Hono) {
     firmAuth,
     zValidator("json", firmFormValidation.partial()),
     async (c) => {
-      const { id: firmId } = c.get("firm");
+      const firm = c.get("firm");
+      const firmId = firm.id;
 
       const formInput = c.req.valid("json");
+
+      // throws a DiaLoginError (422) before anything is saved if DIA rejects the new credentials
+      const verification = await verifyFirmDiaCredentials(firm, formInput);
 
       let updatedFirm: SelectableFirm;
 
@@ -434,10 +444,16 @@ export function registerAdminRoutes(app: Hono) {
         throw error;
       }
 
+      const warning = await applyFirmDiaCredentialsVerification(
+        firmId,
+        verification,
+      );
+
       return c.json(
         {
           message: "Firmanız güncellendi",
           updatedFirm: { ...updatedFirm, diaPassword: undefined },
+          warning,
         },
         200,
       );

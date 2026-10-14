@@ -1,6 +1,7 @@
 import axios, { type AxiosResponse, isAxiosError } from "axios";
 import { eq } from "drizzle-orm";
 import { URL_BASE } from "../constants/dia.js";
+import { diaLoginErrors } from "../constants/messages.js";
 import type { DB } from "../db/index.js";
 import { firmsTable } from "../db/schemas/firms.js";
 import type {
@@ -22,6 +23,81 @@ import { env } from "../config/env.js";
 export const createDiaUrl = (serverCode: string, module: string) =>
   `https://${encodeURIComponent(serverCode)}.${URL_BASE}/${module}/json`;
 
+/**
+ * Thrown when we can't get a DIA session for a firm, the message is meant for the user
+ */
+export class DiaLoginError extends Error {
+  constructor(
+    message: string,
+    /** DIA's own reason (e.g. NOUSER), for logs */
+    readonly diaMessage?: string,
+  ) {
+    super(message);
+    this.name = "DiaLoginError";
+  }
+}
+
+export type DiaCredentials = {
+  username: string;
+  /** plaintext */
+  password: string;
+  apiKey: string;
+};
+
+/**
+ * @returns the new DIA session id
+ * @throws {DiaLoginError} if DIA rejects the credentials, network errors are thrown as is
+ */
+export async function diaLogin(
+  serverCode: string,
+  credentials: DiaCredentials,
+) {
+  const loginRequest: DiaLoginRequest = {
+    login: {
+      username: credentials.username,
+      password: credentials.password,
+      disconnect_same_user: "true",
+      params: { apikey: credentials.apiKey },
+    },
+  };
+
+  const { data } = await axios.post<
+    DiaLoginResponse,
+    AxiosResponse<DiaLoginResponse>,
+    DiaLoginRequest
+  >(createDiaUrl(serverCode, "sis"), loginRequest);
+
+  // DIA responds with HTTP 200 even when the login is rejected
+  if (data.code !== "200") {
+    console.log(`DIA login rejected for ${serverCode}: ${data.msg}`);
+    throw new DiaLoginError(diaLoginErrors.rejected, data.msg);
+  }
+
+  return data.msg;
+}
+
+/**
+ * Tries the credentials before they are saved
+ * @throws {DiaLoginError} if DIA rejects the credentials
+ */
+export async function verifyDiaCredentials(
+  serverCode: string,
+  credentials: DiaCredentials,
+): Promise<{ status: "ok"; sessionId: string } | { status: "unreachable" }> {
+  try {
+    return { status: "ok", sessionId: await diaLogin(serverCode, credentials) };
+  } catch (error) {
+    if (isAxiosError(error)) {
+      console.log(
+        `Couldn't reach DIA to verify ${serverCode}: ${error.message}`,
+      );
+      return { status: "unreachable" };
+    }
+
+    throw error;
+  }
+}
+
 type LoginResult = "login" | "successful-ping";
 async function login(
   db: DB,
@@ -29,7 +105,7 @@ async function login(
   sessionId?: string,
 ): Promise<{
   result: LoginResult;
-  loginResponse?: DiaLoginResponse;
+  sessionId?: string;
 }> {
   const requestUrl = createDiaUrl(serverCode, "sis");
 
@@ -63,28 +139,17 @@ async function login(
     .where(eq(firmsTable.diaServerCode, serverCode));
 
   if (!username || !password || apiKey === null)
-    throw new Error(
-      "Tried logging into DIA with a firm that has no DIA credentials",
-    );
+    throw new DiaLoginError(diaLoginErrors.missingCredentials);
 
-  const loginRequest: DiaLoginRequest = {
-    login: {
-      username,
-      password: aesDecrypt(password),
-      disconnect_same_user: "true",
-      params: { apikey: apiKey },
-    },
-  };
+  const newSessionId = await diaLogin(serverCode, {
+    username,
+    password: aesDecrypt(password),
+    apiKey,
+  });
 
-  const loginResponse = await axios.post<DiaLoginResponse>(
-    requestUrl,
-    loginRequest,
-  );
+  await setDiaSession(firmId, newSessionId);
 
-  const loginResData = loginResponse.data;
-  await setDiaSession(firmId, loginResData.msg);
-
-  return { result: "login", loginResponse: loginResData };
+  return { result: "login", sessionId: newSessionId };
 }
 
 /**
@@ -123,9 +188,8 @@ export async function dia<
     url.serverCode,
     finalRequest?.[serviceKey].session_id || undefined,
   );
-  const loginResSessionId = loginRes.loginResponse?.msg;
-  if (loginResSessionId)
-    finalRequest[serviceKey].session_id = loginResSessionId;
+  if (loginRes.sessionId)
+    finalRequest[serviceKey].session_id = loginRes.sessionId;
 
   try {
     const response = await axios.post<TResponse>(requestUrl, finalRequest);

@@ -32,6 +32,10 @@ export async function getDiaSession(firmId: number) {
   return await redis.get(`${diaSessionKey}:${firmId}`);
 }
 
+export async function deleteDiaSession(firmId: number) {
+  return await redis.del(`${diaSessionKey}:${firmId}`);
+}
+
 /**
  * Also sets the user session
  * @returns the
