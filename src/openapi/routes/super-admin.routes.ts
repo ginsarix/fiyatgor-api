@@ -184,7 +184,7 @@ export const createFirmRoute = createRoute({
 		},
 		422: {
 			content: { 'application/json': { schema: MessageSchema } },
-			description: 'Validation error',
+			description: 'Validation error, or DIA rejected the DIA credentials (nothing is saved)',
 		},
 	},
 });
@@ -227,7 +227,7 @@ export const updateFirmByIdRoute = createRoute({
 		},
 		422: {
 			content: { 'application/json': { schema: MessageSchema } },
-			description: 'Validation error',
+			description: 'Validation error, or DIA rejected the new DIA credentials (nothing is saved)',
 		},
 	},
 });
