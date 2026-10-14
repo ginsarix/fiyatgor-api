@@ -17,8 +17,10 @@ import { aesDecrypt } from "../utils/aes-256-gcm.js";
 import { getDiaSession, setDiaSession } from "./redis.js";
 import { env } from "../config/env.js";
 
+// the server code is user input and DIA credentials are sent to this URL, encoding it keeps
+// characters like "/", "#" or "@" from moving the request to another host
 export const createDiaUrl = (serverCode: string, module: string) =>
-  `https://${serverCode}.${URL_BASE}/${module}/json`;
+  `https://${encodeURIComponent(serverCode)}.${URL_BASE}/${module}/json`;
 
 type LoginResult = "login" | "successful-ping";
 async function login(
